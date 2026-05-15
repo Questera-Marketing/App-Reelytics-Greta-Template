@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Secrets
+.env
+.env.local
+.env.*.local
+
+# Cache / build artifacts
+*.log
+.DS_Store
+
+# Per-run data (regenerated on each report)
+thumbs/*.jpg
+thumbs/*.jpeg
+thumbs/*.png
+report-data.json

@@ -1,0 +1,1897 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reelytics — Instagram Reels Analytics</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <style>
+    :root {
+      --bg: #0a0a0f; --bg-2: #11111a; --card: #15151f; --card-2: #1c1c28;
+      --border: #2a2a38; --border-2: #3a3a4d;
+      --text: #f5f5f7; --muted: #9a9aae;
+      --accent: #8b7cff; --accent-2: #c084fc; --accent-3: #ec4899;
+      --good: #4ade80; --warn: #fb923c; --bad: #f87171;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; }
+    button { font-family: inherit; cursor: pointer; }
+    .hidden { display: none !important; }
+
+    /* Landing */
+    .landing { min-height: 100vh; background: radial-gradient(ellipse at top, rgba(139, 124, 255, 0.15), transparent 60%), radial-gradient(ellipse at bottom right, rgba(236, 72, 153, 0.1), transparent 50%), var(--bg); }
+    .nav { display: flex; align-items: center; justify-content: space-between; padding: 24px 48px; max-width: 1400px; margin: 0 auto; }
+    .logo { font-weight: 800; font-size: 1.3rem; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px; }
+    .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent-3)); }
+    .nav-cta { padding: 10px 20px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text); font-weight: 600; transition: all 0.2s; }
+    .nav-cta:hover { background: var(--accent); border-color: var(--accent); }
+
+    .hero { max-width: 1100px; margin: 0 auto; padding: 80px 32px 64px; text-align: center; }
+    .badge { display: inline-block; padding: 6px 14px; border: 1px solid var(--border-2); border-radius: 999px; font-size: 0.82rem; color: var(--muted); margin-bottom: 24px; }
+    .hero h1 { font-size: clamp(2.4rem, 6vw, 4.5rem); font-weight: 800; line-height: 1.05; letter-spacing: -0.03em; margin: 0 0 24px; background: linear-gradient(180deg, #ffffff 0%, #b8b8d0 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero p { font-size: 1.2rem; color: var(--muted); max-width: 640px; margin: 0 auto 40px; line-height: 1.6; }
+    .hero-cta { display: inline-flex; gap: 12px; }
+    .btn-primary { padding: 14px 28px; border: none; border-radius: 999px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: white; font-weight: 700; font-size: 1rem; box-shadow: 0 20px 50px rgba(139, 124, 255, 0.3); transition: transform 0.2s; }
+    .btn-primary:hover { transform: translateY(-2px); }
+    .btn-ghost { padding: 14px 28px; border: 1px solid var(--border-2); border-radius: 999px; background: transparent; color: var(--text); font-weight: 600; font-size: 1rem; }
+
+    .features { max-width: 1100px; margin: 0 auto; padding: 32px 32px 96px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+    .feature { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 28px; }
+    .feature-icon { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, rgba(139, 124, 255, 0.2), rgba(192, 132, 252, 0.2)); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; font-size: 1.5rem; }
+    .feature h3 { font-size: 1.1rem; margin: 0 0 8px; }
+    .feature p { font-size: 0.95rem; color: var(--muted); line-height: 1.5; margin: 0; }
+
+    .formulas { max-width: 1100px; margin: 0 auto; padding: 0 32px 96px; }
+    .formulas h2 { font-size: 1.8rem; margin: 0 0 24px; letter-spacing: -0.02em; }
+    .formula-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .formula { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; font-family: 'SF Mono', Monaco, monospace; font-size: 0.92rem; color: #c8c8e0; }
+    .formula b { color: var(--accent); font-weight: 600; }
+
+    /* Modal */
+    .modal-bg { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 24px; }
+    .modal { background: var(--card); border: 1px solid var(--border); border-radius: 24px; padding: 36px; max-width: 460px; width: 100%; }
+    .modal h2 { margin: 0 0 8px; font-size: 1.4rem; }
+    .modal p { color: var(--muted); margin: 0 0 24px; font-size: 0.95rem; line-height: 1.5; }
+    .modal .input-wrap { position: relative; margin-bottom: 12px; }
+    .modal .input-prefix { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: 600; pointer-events: none; }
+    .modal input { width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border-2); background: var(--bg-2); color: var(--text); font-size: 1rem; outline: none; transition: border-color 0.2s; }
+    .modal input.with-prefix { padding-left: 32px; }
+    .modal input:focus { border-color: var(--accent); }
+    .modal-actions { display: flex; gap: 10px; margin-top: 8px; }
+    .modal-actions button { flex: 1; padding: 12px 16px; border-radius: 12px; font-weight: 600; }
+    .btn-cancel { background: transparent; border: 1px solid var(--border-2); color: var(--text); }
+
+    /* Dashboard */
+    .app { display: grid; grid-template-rows: auto 1fr; min-height: 100vh; }
+    .app-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px; border-bottom: 1px solid var(--border); background: var(--bg-2); position: sticky; top: 0; z-index: 10; backdrop-filter: blur(20px); }
+    .app-header-left { display: flex; align-items: center; gap: 20px; }
+    .account-switcher { display: flex; align-items: center; gap: 8px; padding: 8px 12px 8px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; transition: border-color 0.2s; position: relative; }
+    .account-switcher:hover { border-color: var(--border-2); }
+    .account-switcher .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
+    .account-switcher .dot.pending { background: var(--warn); }
+    .account-switcher .dot.failed { background: var(--bad); }
+    .account-switcher .name { font-weight: 600; font-size: 0.95rem; }
+    .account-switcher .caret { color: var(--muted); font-size: 0.8rem; margin-left: 4px; }
+
+    .dropdown { position: absolute; top: calc(100% + 8px); left: 0; min-width: 300px; background: var(--card); border: 1px solid var(--border-2); border-radius: 16px; padding: 8px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); z-index: 20; }
+    .dropdown-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; cursor: pointer; transition: background 0.15s; }
+    .dropdown-item:hover { background: var(--card-2); }
+    .dropdown-item.active { background: rgba(139, 124, 255, 0.15); }
+    .dropdown-item .check { margin-left: auto; color: var(--accent); font-weight: 700; }
+    .dropdown-separator { height: 1px; background: var(--border); margin: 6px 8px; }
+    .dropdown-add { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; cursor: pointer; color: var(--accent); font-weight: 600; }
+    .dropdown-add:hover { background: var(--card-2); }
+
+    .header-user { display: flex; align-items: center; gap: 12px; }
+    .user-email { font-size: 0.9rem; color: var(--muted); }
+    .btn-icon { width: 36px; height: 36px; border-radius: 10px; background: var(--card); border: 1px solid var(--border); color: var(--text); display: inline-flex; align-items: center; justify-content: center; }
+    .btn-icon:hover { border-color: var(--border-2); }
+
+    .main { padding: 32px; max-width: 1400px; margin: 0 auto; width: 100%; }
+    .main-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; flex-wrap: wrap; gap: 16px; }
+    .main-header h1 { font-size: 2rem; margin: 0; letter-spacing: -0.02em; }
+    .account-handle { color: var(--accent); }
+    .main-header p { margin: 6px 0 0; color: var(--muted); }
+
+    .empty-state { text-align: center; padding: 80px 24px; background: var(--card); border: 1px dashed var(--border-2); border-radius: 24px; }
+    .empty-state h2 { font-size: 1.4rem; margin: 0 0 8px; }
+    .empty-state p { color: var(--muted); margin: 0 0 24px; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 28px; }
+    .stat { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px; min-width: 0; }
+    .stat-label { color: var(--muted); font-size: 0.7rem; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stat-value { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stat-value small { font-size: 0.9rem; color: var(--muted); font-weight: 500; margin-left: 4px; }
+
+    .info-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: var(--border); color: var(--text); font-size: 0.7rem; font-weight: 700; cursor: help; opacity: 0.6; font-family: serif; line-height: 1; }
+    .info-btn:hover { opacity: 1; background: var(--accent); color: white; }
+    .info-btn .tt { position: absolute; bottom: calc(100% + 8px); right: -8px; min-width: 220px; max-width: 320px; padding: 10px 12px; background: #0b0b13; border: 1px solid var(--border-2); border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,0.5); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; font-size: 0.8rem; font-weight: 500; line-height: 1.45; text-align: left; opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 50; white-space: normal; }
+    .info-btn .tt b { color: var(--accent); font-weight: 700; }
+    .info-btn .tt code { background: #1a1a26; padding: 1px 5px; border-radius: 4px; color: #d8d8e8; font-size: 0.74rem; font-family: 'SF Mono', Monaco, monospace; }
+    .info-btn:hover .tt { opacity: 1; }
+    .info-btn .tt::after { content: ''; position: absolute; top: 100%; right: 12px; border: 6px solid transparent; border-top-color: #0b0b13; }
+    th .info-btn .tt { right: auto; left: -8px; text-transform: none; letter-spacing: 0; }
+    th .info-btn .tt::after { right: auto; left: 12px; }
+    .estimated-flag { color: var(--warn); font-size: 0.72rem; margin-left: 3px; cursor: help; }
+
+    .section-title { font-size: 1.3rem; margin: 32px 0 16px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
+
+    .top-reels { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .top-reel { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; aspect-ratio: 9 / 16; max-height: 420px; min-width: 0; }
+    .top-reel img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .top-reel .placeholder { width: 100%; height: 100%; background: var(--card-2); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 0.78rem; }
+    .top-reel-overlay { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.85) 100%); padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; color: white; }
+    .top-reel-rank { position: absolute; top: 12px; left: 12px; padding: 3px 9px; background: linear-gradient(135deg, var(--accent), var(--accent-3)); border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+    .top-reel-score { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+    .top-reel-score small { font-size: 0.62rem; color: rgba(255,255,255,0.7); font-weight: 500; margin-left: 5px; text-transform: uppercase; letter-spacing: 0.08em; }
+    .top-reel-meta { font-size: 0.78rem; color: rgba(255,255,255,0.8); margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
+    /* Compact variant when no thumbnail is available */
+    .top-reel.compact { aspect-ratio: unset; max-height: none; padding: 18px 16px; min-height: 0; background: linear-gradient(135deg, var(--card), var(--card-2)); }
+    .top-reel.compact .placeholder { display: none; }
+    .top-reel.compact .top-reel-overlay { position: relative; inset: auto; background: none; padding: 0; padding-top: 22px; }
+    .top-reel.compact .top-reel-rank { top: 12px; left: 14px; }
+    .top-reel.compact .top-reel-score { font-size: 1.4rem; }
+    .top-reel.compact .top-reel-meta { font-size: 0.75rem; flex-direction: column; gap: 2px; }
+
+    .reels-table { background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; }
+    .reels-table-scroll { overflow-x: auto; }
+    table.reels { width: 100%; border-collapse: collapse; font-size: 0.92rem; min-width: 1200px; }
+    table.reels th, table.reels td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    table.reels th { background: var(--card-2); color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; position: sticky; top: 0; cursor: pointer; user-select: none; }
+    table.reels th:hover { color: var(--text); }
+    table.reels th .sort-arrow { color: var(--accent); margin-left: 4px; font-size: 0.7rem; }
+    table.reels tr:last-child td { border-bottom: none; }
+    table.reels tbody tr { cursor: pointer; }
+    table.reels tr:hover td { background: rgba(139, 124, 255, 0.06); }
+    .thumb-cell { display: flex; align-items: center; gap: 10px; min-width: 280px; white-space: nowrap; }
+    .thumb-cell img, .thumb-cell .ph { width: 28px; height: 40px; border-radius: 6px; object-fit: cover; background: var(--card-2); flex-shrink: 0; }
+    .thumb-cell .caption { font-size: 0.88rem; line-height: 1.35; color: #d8d8e8; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .thumb-cell .external { color: var(--muted); font-size: 0.8rem; flex-shrink: 0; }
+    .pill { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; min-width: 36px; text-align: center; }
+    .pill.good { background: rgba(74, 222, 128, 0.15); color: var(--good); }
+    .pill.warn { background: rgba(251, 146, 60, 0.15); color: var(--warn); }
+    .pill.bad { background: rgba(248, 113, 113, 0.15); color: var(--bad); }
+    .num { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+    .toast { position: fixed; bottom: 24px; right: 24px; padding: 14px 18px; background: var(--card); border: 1px solid var(--border-2); border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,0.4); font-size: 0.92rem; z-index: 100; max-width: 380px; }
+    .toast.error { border-color: rgba(248, 113, 113, 0.5); }
+    .toast.success { border-color: rgba(74, 222, 128, 0.5); }
+
+    .loader { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .pending-banner { padding: 14px 18px; background: rgba(251, 146, 60, 0.1); border: 1px solid rgba(251, 146, 60, 0.3); border-radius: 14px; color: var(--warn); margin-bottom: 20px; font-size: 0.92rem; }
+
+    .legend { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 20px 24px; margin-top: 24px; }
+    .legend h3 { margin: 0 0 12px; font-size: 1.05rem; }
+    .legend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px 24px; font-size: 0.88rem; color: var(--muted); }
+    .legend-grid b { color: var(--text); font-weight: 600; }
+    .legend-grid code { background: var(--bg); padding: 1px 6px; border-radius: 4px; color: #c8c8e0; font-size: 0.82rem; }
+
+    /* Report history selector */
+    .report-history-wrap { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .report-history-label { color: var(--muted); font-size: 0.82rem; }
+    .report-history-select { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 999px; font-size: 0.85rem; font-family: inherit; cursor: pointer; outline: none; max-width: 380px; }
+    .report-history-select:hover { border-color: var(--border-2); }
+    .report-history-select:focus { border-color: var(--accent); }
+
+    /* Dev-mode OTP banner */
+    .dev-code-banner { background: rgba(251,146,60,0.12); border: 1px dashed rgba(251,146,60,0.5); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; font-size: 0.85rem; color: var(--warn); }
+    .dev-code-banner b { color: var(--text); font-family: 'SF Mono', Monaco, monospace; font-size: 1.1rem; letter-spacing: 0.2em; }
+
+    /* Role badges */
+    .role-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-left: 6px; }
+    .role-badge.owner { background: rgba(192,132,252,0.18); color: var(--accent-2); }
+    .role-badge.admin { background: rgba(74,222,128,0.18); color: var(--good); }
+    .role-badge.viewer { background: rgba(154,154,174,0.18); color: var(--muted); }
+
+    /* Team members */
+    .team-member { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; }
+    .team-member-info { flex: 1; min-width: 0; }
+    .team-member-email { font-weight: 600; font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .team-member-meta { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+    .team-member select { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 6px 8px; border-radius: 8px; font-size: 0.82rem; cursor: pointer; }
+    .team-member button.remove { background: transparent; border: 1px solid var(--border); color: var(--bad); padding: 6px 10px; border-radius: 8px; font-size: 0.82rem; cursor: pointer; }
+    .team-member button.remove:hover { background: rgba(248,113,113,0.1); }
+
+    /* Settings */
+    .settings-section { margin: 0 -8px 20px; padding: 16px 16px 8px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 16px; }
+    .settings-section-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+    .settings-section-tag { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: white; font-size: 0.78rem; font-weight: 800; flex-shrink: 0; }
+    .settings-section-title { font-weight: 700; font-size: 1rem; margin-bottom: 2px; }
+    .settings-section-why { font-size: 0.82rem; color: var(--muted); line-height: 1.45; }
+    .setting-row { margin-bottom: 14px; }
+    .setting-label { display: block; font-weight: 600; font-size: 0.88rem; color: var(--text); margin-bottom: 4px; }
+    .setting-state { font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; font-family: 'SF Mono', Monaco, monospace; }
+    .setting-state b { color: var(--good); font-weight: 600; }
+    .setting-state.unset b { color: var(--muted); }
+    .setting-state.using-default b { color: var(--warn); }
+    .setting-hint { font-size: 0.76rem; color: var(--muted); margin-top: 6px; line-height: 1.45; }
+    .setting-hint a { color: var(--accent); font-weight: 600; }
+    .setting-select { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border-2); background: var(--bg); color: var(--text); font-size: 0.95rem; font-family: inherit; outline: none; cursor: pointer; }
+    .setting-select:focus { border-color: var(--accent); }
+
+    .provider-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    .provider-card { display: flex; gap: 12px; align-items: center; padding: 12px 14px; background: var(--bg); border: 1px solid var(--border-2); border-radius: 12px; cursor: pointer; transition: border-color 0.2s; }
+    .provider-card:hover { border-color: var(--accent); }
+    .provider-card.disabled { opacity: 0.55; cursor: not-allowed; }
+    .provider-card.disabled:hover { border-color: var(--border-2); }
+    .provider-card input[type="radio"] { margin: 0; accent-color: var(--accent); }
+    .provider-card:has(input:checked) { border-color: var(--accent); background: rgba(139, 124, 255, 0.08); }
+    .provider-name { font-weight: 700; font-size: 0.92rem; }
+    .provider-sub { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+    /* Action headline banner */
+    .action-headline { background: linear-gradient(135deg, rgba(139,124,255,0.18), rgba(192,132,252,0.12)); border: 1px solid rgba(139,124,255,0.35); border-radius: 20px; padding: 22px 26px; margin: 0 0 24px; display: flex; gap: 18px; align-items: flex-start; }
+    .action-headline-icon { font-size: 1.8rem; line-height: 1; flex-shrink: 0; }
+    .action-headline-body { flex: 1; }
+    .action-headline-label { font-size: 0.7rem; color: var(--accent); font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px; }
+    .action-headline-text { font-size: 1.02rem; line-height: 1.55; color: var(--text); font-weight: 500; }
+
+    /* Composio key missing banner */
+    .key-missing-banner { background: rgba(251,146,60,0.1); border: 1px solid rgba(251,146,60,0.4); border-radius: 14px; padding: 14px 18px; margin-bottom: 18px; display: flex; gap: 14px; align-items: center; }
+    .key-missing-banner .icon { font-size: 1.4rem; }
+    .key-missing-banner .text { flex: 1; color: var(--warn); font-size: 0.9rem; line-height: 1.4; }
+    .key-missing-banner button { padding: 8px 16px; border-radius: 10px; background: var(--warn); color: var(--bg); border: none; font-weight: 700; cursor: pointer; }
+
+    /* Trend charts */
+    .trends { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 18px 20px; margin: 8px 0 32px; min-width: 0; }
+    .trends-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .trends-tabs { display: flex; flex-wrap: wrap; gap: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 4px; }
+    .trends-tab { padding: 7px 14px; background: transparent; border: none; color: var(--muted); font-size: 0.82rem; font-weight: 600; border-radius: 999px; cursor: pointer; font-family: inherit; white-space: nowrap; transition: all 0.15s; }
+    .trends-tab:hover { color: var(--text); }
+    .trends-tab.active { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: white; }
+    .chart-card { background: transparent; border: none; padding: 0; min-width: 0; }
+    .chart-card h3 { margin: 0; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+    .chart-card .chart-sub { color: var(--muted); font-size: 0.82rem; margin: 0 0 14px; }
+    .chart-card svg { width: 100%; height: auto; display: block; overflow: visible; }
+    .chart-axis text { fill: var(--muted); font-size: 10px; font-family: -apple-system, sans-serif; }
+    .chart-grid line { stroke: var(--border); stroke-width: 1; }
+    .chart-line { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; }
+    .chart-line-rolling { fill: none; stroke: var(--accent-2); stroke-width: 1.5; stroke-dasharray: 4 4; opacity: 0.8; }
+    .chart-area { fill: url(#chart-gradient); opacity: 0.18; }
+    .chart-dot { fill: var(--accent); stroke: var(--bg); stroke-width: 2; cursor: pointer; }
+    .chart-dot.hovered { fill: var(--accent-2); r: 6; }
+    .chart-bar { fill: var(--accent); transition: fill 0.2s; }
+    .chart-bar:hover { fill: var(--accent-2); }
+    .chart-bar.empty { fill: var(--border); }
+    .chart-legend { display: flex; gap: 16px; font-size: 0.78rem; color: var(--muted); margin-top: 8px; }
+    .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .chart-legend i { width: 12px; height: 2px; border-radius: 1px; }
+    .chart-tooltip { position: absolute; pointer-events: none; padding: 8px 10px; background: #0b0b13; border: 1px solid var(--border-2); border-radius: 8px; font-size: 0.78rem; color: var(--text); white-space: nowrap; opacity: 0; transition: opacity 0.1s; z-index: 30; box-shadow: 0 12px 28px rgba(0,0,0,0.5); }
+    .chart-tooltip.show { opacity: 1; }
+    .chart-tooltip b { color: var(--accent); }
+
+    /* Suggestions */
+    .suggestions { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 8px 0 32px; }
+    .suggestions-summary { grid-column: 1 / -1; background: linear-gradient(135deg, rgba(139,124,255,0.12), rgba(192,132,252,0.08)); border: 1px solid rgba(139,124,255,0.3); border-radius: 18px; padding: 18px 22px; font-size: 0.98rem; color: var(--text); line-height: 1.5; }
+    .suggestions-summary b { color: var(--accent); font-weight: 700; }
+    .sugg-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 18px 22px; }
+    .sugg-card h3 { margin: 0 0 14px; font-size: 1.1rem; display: flex; align-items: center; gap: 8px; }
+    .sugg-card.more h3 .pill-icon { background: rgba(74,222,128,0.15); color: var(--good); }
+    .sugg-card.less h3 .pill-icon { background: rgba(248,113,113,0.15); color: var(--bad); }
+    .pill-icon { padding: 3px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+    .sugg-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+    .sugg-item { padding: 12px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; }
+    .sugg-item .sugg-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
+    .sugg-item .sugg-why { font-size: 0.85rem; color: var(--muted); line-height: 1.45; }
+
+    /* Responsive */
+    @media (max-width: 1180px) {
+      .stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .top-reels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 900px) {
+      .nav { padding: 18px 20px; }
+      .hero { padding: 56px 20px 48px; }
+      .hero h1 { font-size: clamp(2rem, 8vw, 3rem); }
+      .features, .formulas { padding-left: 20px; padding-right: 20px; }
+      .app-header { padding: 14px 16px; flex-wrap: wrap; gap: 10px; }
+      .app-header-left { gap: 12px; flex: 1; min-width: 0; }
+      .main { padding: 20px 16px; }
+      .main-header { gap: 12px; }
+      .main-header h1 { font-size: 1.5rem; }
+      .stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+      .stat { padding: 12px 14px; }
+      .stat-value { font-size: 1.25rem; }
+      .top-reels { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .top-reel { aspect-ratio: 9 / 14; }
+      .top-reel-score { font-size: 1.3rem; }
+      .suggestions { grid-template-columns: 1fr; }
+      .trends-row { grid-template-columns: 1fr; }
+      .legend { padding: 16px 18px; }
+      .modal { padding: 24px; }
+      .user-email { display: none; }
+      .dropdown { min-width: 250px; }
+    }
+    @media (max-width: 560px) {
+      .nav .logo { font-size: 1.1rem; }
+      .hero { padding: 40px 16px 32px; }
+      .hero p { font-size: 1.05rem; }
+      .hero-cta { flex-direction: column; width: 100%; }
+      .hero-cta .btn-primary, .hero-cta .btn-ghost { width: 100%; }
+      .feature { padding: 22px; }
+      .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .top-reels { grid-template-columns: 1fr; }
+      .top-reel { aspect-ratio: 9 / 16; }
+      .main-header { flex-direction: column; align-items: stretch; }
+      .main-header > div:last-child { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .main-header > div:last-child button { padding: 12px; font-size: 0.9rem; }
+      .account-switcher { padding: 6px 10px 6px 12px; }
+      .account-switcher .name { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+      .thumb-cell { min-width: 200px; }
+      .thumb-cell .caption { max-width: 220px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============== LANDING ============== -->
+  <div id="landing" class="landing">
+    <nav class="nav">
+      <div class="logo"><span class="logo-dot"></span>Reelytics</div>
+      <button class="nav-cta" id="navLogin">Login</button>
+    </nav>
+
+    <section class="hero">
+      <div class="badge">Instagram Reels Analytics · Powered by Composio + Claude</div>
+      <h1>See exactly which Reels<br/>are pulling their weight.</h1>
+      <p>Connect any Instagram Business or Creator account in seconds. Reelytics fetches your private insights, computes hook scores, and surfaces the reels worth replicating.</p>
+      <div class="hero-cta">
+        <button class="btn-primary" id="heroStart">Get started</button>
+        <a class="btn-ghost" href="#features">How it works</a>
+      </div>
+    </section>
+
+    <section id="features" class="features">
+      <div class="feature"><div class="feature-icon">🔌</div><h3>One-click Instagram connect</h3><p>OAuth via Composio. Connect multiple Instagram accounts and switch between them with a single toggle.</p></div>
+      <div class="feature"><div class="feature-icon">📊</div><h3>Private insights, surfaced</h3><p>Views, reach, watch time, saves, shares, and replays — pulled directly from Instagram Graph and graded.</p></div>
+      <div class="feature"><div class="feature-icon">🎯</div><h3>Hook score, not vanity</h3><p>Every reel is ranked by a hook score that combines watch time, reach, saves, and shares — so you focus on signal.</p></div>
+      <div class="feature"><div class="feature-icon">🗂️</div><h3>Persistent dashboards</h3><p>Reports save to Supabase. Come back anytime and compare campaign performance without re-running the agent.</p></div>
+    </section>
+
+    <section class="formulas">
+      <h2>The math, made transparent</h2>
+      <div class="formula-grid">
+        <div class="formula"><b>watch_s</b> = ig_reels_avg_watch_time ÷ 1000</div>
+        <div class="formula"><b>hook_rate</b> = watch_s ÷ duration_s</div>
+        <div class="formula"><b>replay_rate</b> = views ÷ reach</div>
+        <div class="formula"><b>share_pct</b> = shares ÷ reach × 100</div>
+        <div class="formula"><b>save_pct</b> = saved ÷ reach × 100</div>
+        <div class="formula"><b>hook_score</b> = watch_s × √reach × (1 + share_pct/100 + save_pct/200)</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============== LOGIN MODAL ============== -->
+  <div id="authModal" class="modal-bg hidden">
+    <div class="modal">
+      <div id="authStepEmail">
+        <h2>Welcome to Reelytics</h2>
+        <p>Sign in with your email. We'll send a 6-digit code to verify it's you.</p>
+        <div class="input-wrap"><input id="authEmail" type="email" placeholder="you@company.com" autocomplete="email" /></div>
+        <div class="input-wrap"><input id="authName" type="text" placeholder="Your name (optional)" autocomplete="name" /></div>
+        <div class="modal-actions">
+          <button class="btn-cancel" id="authCancel">Cancel</button>
+          <button class="btn-primary" id="authSubmit" style="box-shadow: none;">Send code</button>
+        </div>
+      </div>
+      <div id="authStepCode" class="hidden">
+        <h2>Check your email</h2>
+        <p>We sent a 6-digit code to <b id="authStepCodeEmail"></b>. Enter it below to sign in. The code expires in 10 minutes.</p>
+        <div id="authDevCodeBanner" class="dev-code-banner hidden"></div>
+        <div class="input-wrap"><input id="authCode" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="123456" style="font-family:'SF Mono', Monaco, monospace; letter-spacing:0.4em; text-align:center; font-size:1.2rem;" /></div>
+        <div class="modal-actions">
+          <button class="btn-cancel" id="authCodeBack">Use a different email</button>
+          <button class="btn-primary" id="authCodeSubmit" style="box-shadow: none;">Verify &amp; sign in</button>
+        </div>
+        <div style="margin-top:14px; text-align:center;">
+          <a href="#" id="authResendCode" style="color: var(--muted); font-size: 0.85rem;">Resend code</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== SETTINGS MODAL ============== -->
+  <div id="settingsModal" class="modal-bg hidden">
+    <div class="modal" style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
+      <h2>Settings</h2>
+      <p>Reelytics uses two services. Connect them with your own keys — they're stored in Supabase against your account.</p>
+
+      <div class="settings-section">
+        <div class="settings-section-head">
+          <span class="settings-section-tag">1</span>
+          <div>
+            <div class="settings-section-title">Composio</div>
+            <div class="settings-section-why">Powers the Instagram OAuth connect flow and lets Reelytics call Instagram's private insights API on your behalf.</div>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label class="setting-label">API key</label>
+          <div class="setting-state" id="composioState">—</div>
+          <input id="settingsComposio" type="password" placeholder="ck_…  (leave blank to keep current)" autocomplete="off" />
+          <div class="setting-hint">Don't have one? <a href="https://platform.composio.dev/developers/api-keys" target="_blank" rel="noopener">Create a free Composio account → Developers → API keys ↗</a></div>
+          <div class="setting-hint" style="margin-top:8px; padding:8px 10px; background:rgba(139,124,255,0.08); border-left:2px solid var(--accent); border-radius:6px;">Note: when a teammate generates a report on an account <em>you</em> own, the server uses <strong>your</strong> Composio key — not theirs. Each Instagram account always runs against the owner's key.</div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-head">
+          <span class="settings-section-tag">2</span>
+          <div>
+            <div class="settings-section-title">LLM keys</div>
+            <div class="settings-section-why">Paste keys for whichever providers you have. Pick one as the active provider — Reelytics auto-selects the best model for that provider. Anthropic powers the data-fetch agent (required) — your selection chooses who writes the "Do more / Do less" analysis.</div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <label class="setting-label">Active provider for analysis</label>
+          <select id="settingsProvider" class="setting-select">
+            <option value="anthropic">Anthropic Claude</option>
+            <option value="openai">OpenAI GPT</option>
+            <option value="google">Google Gemini</option>
+          </select>
+          <div class="setting-hint">Whichever you pick, we auto-select the strongest current model for that provider. Note: the data-fetch agent always uses Anthropic (it's the only SDK that supports MCP today), so an Anthropic key is required regardless.</div>
+        </div>
+
+        <div class="setting-row">
+          <label class="setting-label">Anthropic API key <span style="color: var(--bad); font-weight: 400; font-size: 0.78rem;">· required</span></label>
+          <div class="setting-state" id="anthropicState">—</div>
+          <input id="settingsAnthropic" type="password" placeholder="sk-ant-…  (leave blank to keep current)" autocomplete="off" />
+          <div class="setting-hint"><a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Get an Anthropic key ↗</a></div>
+        </div>
+
+        <div class="setting-row">
+          <label class="setting-label">OpenAI API key <span style="color: var(--muted); font-weight: 400; font-size: 0.78rem;">· optional</span></label>
+          <div class="setting-state" id="openaiState">—</div>
+          <input id="settingsOpenai" type="password" placeholder="sk-…  (leave blank to keep current)" autocomplete="off" />
+          <div class="setting-hint"><a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">Get an OpenAI key ↗</a></div>
+        </div>
+
+        <div class="setting-row">
+          <label class="setting-label">Google Gemini API key <span style="color: var(--muted); font-weight: 400; font-size: 0.78rem;">· optional</span></label>
+          <div class="setting-state" id="geminiState">—</div>
+          <input id="settingsGemini" type="password" placeholder="AIza…  (leave blank to keep current)" autocomplete="off" />
+          <div class="setting-hint"><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Get a Gemini key ↗</a></div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" id="settingsCancel">Close</button>
+        <button class="btn-primary" id="settingsSave" style="box-shadow: none;">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== TEAM MODAL ============== -->
+  <div id="teamModal" class="modal-bg hidden">
+    <div class="modal" style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
+      <h2>Team access · <span id="teamAccountLabel" style="color: var(--accent);"></span></h2>
+      <p>Invite teammates by email. <b>Admins</b> can generate reports and invite more people. <b>Viewers</b> can browse the dashboard but not generate.</p>
+
+      <div id="teamInviteRow" class="hidden" style="display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;">
+        <input id="teamInviteEmail" type="email" placeholder="teammate@example.com" autocomplete="email" style="flex:1; min-width:200px; padding:12px 14px; border-radius:10px; border:1px solid var(--border-2); background:var(--bg-2); color:var(--text); font-size:0.95rem; outline:none;" />
+        <select id="teamInviteRole" class="setting-select" style="flex:0 0 130px;">
+          <option value="viewer">Viewer</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button class="btn-primary" id="teamInviteBtn" style="box-shadow:none;">Invite</button>
+      </div>
+
+      <div id="teamDevBanner" class="dev-code-banner hidden"></div>
+
+      <h3 style="margin: 14px 0 8px; font-size: 0.95rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em;">Members</h3>
+      <div id="teamMembersList"></div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" id="teamClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== ADD ACCOUNT MODAL ============== -->
+  <div id="addModal" class="modal-bg hidden">
+    <div class="modal">
+      <h2>Add Instagram account</h2>
+      <p>Enter the Instagram handle you want to connect, then authorize via Composio.</p>
+      <div class="input-wrap">
+        <span class="input-prefix">@</span>
+        <input id="addUsername" class="with-prefix" type="text" placeholder="greta.ai" autocapitalize="none" autocorrect="off" spellcheck="false" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="addCancel">Cancel</button>
+        <button class="btn-primary" id="addSubmit" style="box-shadow: none;">Connect via Composio</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== DASHBOARD ============== -->
+  <div id="app" class="app hidden">
+    <header class="app-header">
+      <div class="app-header-left">
+        <div class="logo"><span class="logo-dot"></span>Reelytics</div>
+        <div id="switcherWrap" style="position: relative;">
+          <div class="account-switcher" id="switcher">
+            <span class="dot" id="switcherDot"></span>
+            <span class="name" id="switcherName">No account</span>
+            <span class="caret">▾</span>
+          </div>
+          <div class="dropdown hidden" id="switcherDropdown"></div>
+        </div>
+      </div>
+      <div class="header-user">
+        <span class="user-email" id="userEmail"></span>
+        <button class="btn-icon" id="teamBtn" title="Team access">👥</button>
+        <button class="btn-icon" id="settingsBtn" title="Settings">⚙</button>
+        <button class="btn-icon" id="logoutBtn" title="Logout">⎋</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <div class="main-header">
+        <div style="min-width:0;">
+          <h1 id="mainTitle">Your dashboard</h1>
+          <p id="mainSubtitle">Generate a report to see your reels performance.</p>
+          <div id="reportHistoryWrap" class="report-history-wrap hidden">
+            <label for="reportHistory" class="report-history-label">Viewing report:</label>
+            <select id="reportHistory" class="report-history-select"></select>
+          </div>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button class="btn-ghost" id="pdfBtn" title="Save as PDF">⬇ PDF</button>
+          <button class="btn-primary" id="generateBtn" style="box-shadow: none;">Generate report</button>
+        </div>
+      </div>
+
+      <div id="keyMissingBanner" class="key-missing-banner hidden">
+        <span class="icon">🔑</span>
+        <div class="text" id="keyMissingText">Composio API key isn't set yet — add it in Settings to start connecting Instagram accounts.</div>
+        <button id="keyMissingOpenSettings">Open Settings</button>
+      </div>
+
+      <div id="pendingBanner" class="pending-banner hidden"></div>
+
+      <div id="emptyState" class="empty-state hidden">
+        <h2 id="emptyTitle">Connect your first Instagram account</h2>
+        <p id="emptyMsg">Once linked, Reelytics fetches your reels and grades them automatically.</p>
+        <button class="btn-primary" id="emptyAddBtn" style="box-shadow: none;">+ Add Instagram account</button>
+      </div>
+
+      <div id="reportView" class="hidden">
+        <div id="actionHeadlineBlock" class="action-headline hidden">
+          <div class="action-headline-icon">✨</div>
+          <div class="action-headline-body">
+            <div class="action-headline-label">Team brief · This week</div>
+            <div class="action-headline-text" id="actionHeadlineText"></div>
+          </div>
+        </div>
+
+        <div class="stats-grid" id="statsGrid"></div>
+
+        <div id="suggestionsBlock" class="hidden">
+          <h2 class="section-title">Suggestions for next reels</h2>
+          <div class="suggestions" id="suggestionsGrid"></div>
+        </div>
+
+        <div id="trendsBlock" class="hidden">
+          <h2 class="section-title">Trends</h2>
+          <div class="trends">
+            <div class="trends-head">
+              <div class="trends-tabs" id="trendsTabs"></div>
+              <div class="chart-sub" id="trendsSub" style="margin:0;"></div>
+            </div>
+            <div id="trendsChart"></div>
+          </div>
+        </div>
+
+        <h2 class="section-title">Top 5 reels by hook score</h2>
+        <div class="top-reels" id="topReels"></div>
+
+        <h2 class="section-title">All reels <span class="info-btn">i<span class="tt">Click any column header to sort. Click again to flip direction.</span></span></h2>
+        <div class="reels-table">
+          <div class="reels-table-scroll">
+            <table class="reels" id="reelsTable">
+              <thead>
+                <tr id="reelsThead"></tr>
+              </thead>
+              <tbody id="reelsTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="legend">
+          <h3>What do these numbers mean?</h3>
+          <div class="legend-grid">
+            <div><b>Hook score (0-100)</b> — Normalized within this report. The top reel = 100, weakest = 0. Use it to find your best-performing reel <em>relative to your own catalog</em>.</div>
+            <div><b>Hook score (raw)</b> — <code>watch_s × √reach × (1 + share_pct/100 + save_pct/200)</code>. Not a percentage; scales with reach. Higher is better.</div>
+            <div><b>Hook rate</b> — <code>watch_s ÷ duration_s × 100</code>. % of the video the average viewer watches. Only shown when duration is available from Instagram.</div>
+            <div><b>Watch s</b> — Average watch time per viewer, in seconds (from <code>ig_reels_avg_watch_time</code>).</div>
+            <div><b>Replay rate</b> — <code>views ÷ reach</code>. A multiplier (1.2× = 20% of viewers rewatched).</div>
+            <div><b>Share % / Save %</b> — Shares or saves as a percentage of reach. Anything above ~2% is unusually strong.</div>
+            <div><b>Engagement %</b> — <code>total_interactions ÷ reach × 100</code>. Aggregate "did the audience react?" metric.</div>
+            <div><b>Views / Reach / Likes / Comments</b> — Raw counts from Instagram Graph private insights.</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const STORAGE_KEY = 'reelytics:userId';
+
+    const state = {
+      user: null,
+      accounts: [],
+      report: null,
+      switcherOpen: false,
+      sort: { key: 'hookScore', dir: 'desc' }
+    };
+
+    /* ---------- Helpers ---------- */
+    function toast(message, type = 'info') {
+      const el = $('toast');
+      el.className = 'toast ' + type;
+      el.textContent = message;
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.add('hidden'), 4000);
+    }
+
+    function showSection(id, show) { $(id).classList.toggle('hidden', !show); }
+
+    function fmtNum(n) {
+      if (n === null || n === undefined || Number.isNaN(n)) return '—';
+      if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+      if (Math.abs(n) >= 1_000) return (n / 1_000).toFixed(1) + 'k';
+      if (Number.isInteger(n)) return String(n);
+      return n.toFixed(2);
+    }
+
+    function fmtPct(n) {
+      if (n === null || n === undefined || Number.isNaN(n)) return '—';
+      return n.toFixed(2) + '%';
+    }
+
+    function fmtDate(s) {
+      if (!s) return '—';
+      const d = new Date(s);
+      if (Number.isNaN(d.getTime())) return s;
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+
+    function pillFor(value, thresholds) {
+      if (value === null || value === undefined) return '';
+      if (value >= thresholds.good) return 'good';
+      if (value >= thresholds.warn) return 'warn';
+      return 'bad';
+    }
+
+    /* ---------- API ---------- */
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        headers: { 'Content-Type': 'application/json' },
+        ...opts,
+        body: opts.body ? JSON.stringify(opts.body) : undefined
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err = new Error(json.error || `Request failed: ${res.status}`);
+        err.code = json.code;
+        throw err;
+      }
+      return json;
+    }
+
+    function handleComposioKeyMissing(message) {
+      $('keyMissingText').textContent = message || 'Composio API key isn\'t set. Add it in Settings to continue.';
+      showSection('keyMissingBanner', true);
+      openSettings();
+    }
+
+    /* ---------- Auth ---------- */
+    let pendingAuthUserId = null;
+    let pendingAuthEmail = '';
+
+    function openAuth() {
+      $('authEmail').value = '';
+      $('authName').value = '';
+      $('authCode').value = '';
+      $('authDevCodeBanner').classList.add('hidden');
+      showSection('authStepEmail', true);
+      showSection('authStepCode', false);
+      showSection('authModal', true);
+      setTimeout(() => $('authEmail').focus(), 50);
+    }
+
+    function showCodeStep(email) {
+      $('authStepCodeEmail').textContent = email;
+      showSection('authStepEmail', false);
+      showSection('authStepCode', true);
+      setTimeout(() => $('authCode').focus(), 50);
+    }
+
+    function showDevCode(banner, code) {
+      banner.innerHTML = `Dev mode (no Resend key) — your code is <b>${escapeHtml(code)}</b>`;
+      banner.classList.remove('hidden');
+    }
+
+    async function submitAuth() {
+      const email = $('authEmail').value.trim();
+      const name = $('authName').value.trim();
+      if (!email) { toast('Email required', 'error'); return; }
+      try {
+        const result = await api('/api/auth', { method: 'POST', body: { email, name } });
+        if (result.verified && result.user) {
+          // Existing verified user — skip OTP
+          localStorage.setItem(STORAGE_KEY, result.user.id);
+          showSection('authModal', false);
+          await loadDashboard(result.user.id);
+          return;
+        }
+        // OTP required
+        pendingAuthUserId = result.userId;
+        pendingAuthEmail = result.email;
+        showCodeStep(result.email);
+        if (result.devMode && result.devCode) showDevCode($('authDevCodeBanner'), result.devCode);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function verifyAuthCode() {
+      const code = $('authCode').value.trim();
+      if (!code || code.length !== 6) { toast('Enter the 6-digit code', 'error'); return; }
+      if (!pendingAuthUserId) { toast('Session expired — restart sign-in', 'error'); return; }
+      try {
+        const { user } = await api('/api/auth/verify', { method: 'POST', body: { userId: pendingAuthUserId, code } });
+        localStorage.setItem(STORAGE_KEY, user.id);
+        showSection('authModal', false);
+        pendingAuthUserId = null;
+        pendingAuthEmail = '';
+        await loadDashboard(user.id);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function resendAuthCode() {
+      if (!pendingAuthUserId) return;
+      try {
+        const result = await api('/api/auth/resend', { method: 'POST', body: { userId: pendingAuthUserId } });
+        toast('New code sent', 'success');
+        if (result.devMode && result.devCode) showDevCode($('authDevCodeBanner'), result.devCode);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function backToEmailStep() {
+      pendingAuthUserId = null;
+      pendingAuthEmail = '';
+      $('authCode').value = '';
+      $('authDevCodeBanner').classList.add('hidden');
+      showSection('authStepEmail', true);
+      showSection('authStepCode', false);
+      setTimeout(() => $('authEmail').focus(), 50);
+    }
+
+    function logout() {
+      localStorage.removeItem(STORAGE_KEY);
+      state.user = null;
+      state.accounts = [];
+      state.report = null;
+      showSection('app', false);
+      showSection('landing', true);
+    }
+
+    /* ---------- Dashboard ---------- */
+    async function loadDashboard(userId) {
+      try {
+        const { user, accounts } = await api(`/api/me?userId=${encodeURIComponent(userId)}`);
+        state.user = user;
+        state.accounts = accounts;
+
+        showSection('landing', false);
+        showSection('app', true);
+        $('userEmail').textContent = user.email;
+
+        renderSwitcher();
+        await refreshKeyBanner();
+        await loadLatestReport();
+        renderReport();
+      } catch (e) {
+        toast(e.message, 'error');
+        logout();
+      }
+    }
+
+    function accountLabel(acc) {
+      if (acc.username) return '@' + acc.username;
+      if (acc.alias) return '@' + acc.alias.replace(/^@/, '');
+      return 'Instagram Account';
+    }
+
+    function renderSwitcher() {
+      const dropdown = $('switcherDropdown');
+      const dot = $('switcherDot');
+      const name = $('switcherName');
+
+      const activeAccounts = state.accounts.filter(a => a.status === 'active');
+      const selected = state.accounts.find(a => a.connected_account_id === state.user.selected_connected_account_id);
+
+      if (selected) {
+        const roleBadge = selected.role && selected.role !== 'owner' ? `<span class="role-badge ${selected.role}" style="margin-left:8px;">${selected.role}</span>` : '';
+        name.innerHTML = `${escapeHtml(accountLabel(selected))}${roleBadge}`;
+        dot.className = 'dot ' + (selected.status === 'active' ? '' : selected.status);
+        // Gate Generate button by role
+        const canGenerate = selected.role === 'owner' || selected.role === 'admin';
+        $('generateBtn').disabled = !canGenerate;
+        $('generateBtn').title = canGenerate ? '' : 'Read-only access — ask an admin to generate the report.';
+        $('generateBtn').style.opacity = canGenerate ? '' : '0.5';
+        $('generateBtn').style.cursor = canGenerate ? '' : 'not-allowed';
+      } else if (state.accounts.length === 0) {
+        name.textContent = 'No accounts yet';
+        dot.className = 'dot pending';
+      } else {
+        name.textContent = 'Select account';
+        dot.className = 'dot pending';
+      }
+
+      dropdown.innerHTML = '';
+      state.accounts.forEach(acc => {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item' + (acc.connected_account_id === state.user.selected_connected_account_id ? ' active' : '');
+        const dotColor = acc.status === 'active' ? 'var(--good)' : acc.status === 'pending' ? 'var(--warn)' : 'var(--bad)';
+        item.innerHTML = `
+          <span style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0;"></span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:0.92rem;">${escapeHtml(accountLabel(acc))}</div>
+            <div style="font-size:0.75rem;color:var(--muted);">${acc.status}${acc.connected_status ? ' · ' + escapeHtml(acc.connected_status) : ''}</div>
+          </div>
+          ${acc.connected_account_id === state.user.selected_connected_account_id ? '<span class="check">✓</span>' : ''}
+        `;
+        item.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await selectAccount(acc.connected_account_id);
+        });
+        dropdown.appendChild(item);
+      });
+
+      if (state.accounts.length) {
+        const sep = document.createElement('div');
+        sep.className = 'dropdown-separator';
+        dropdown.appendChild(sep);
+      }
+
+      const addItem = document.createElement('div');
+      addItem.className = 'dropdown-add';
+      addItem.innerHTML = '<span>+</span><span>Add Instagram account</span>';
+      addItem.addEventListener('click', (e) => { e.stopPropagation(); openAdd(); });
+      dropdown.appendChild(addItem);
+
+      const hasActiveAccount = activeAccounts.length > 0;
+      const pendingAccounts = state.accounts.filter(a => a.status === 'pending');
+      if (pendingAccounts.length) {
+        $('pendingBanner').textContent = `${pendingAccounts.length} pending connection${pendingAccounts.length > 1 ? 's' : ''}. Finish the Instagram authorization in the popup, then click Refresh.`;
+        showSection('pendingBanner', true);
+      } else {
+        showSection('pendingBanner', false);
+      }
+
+      if (!hasActiveAccount) {
+        showSection('emptyState', true);
+        showSection('reportView', false);
+      } else {
+        showSection('emptyState', false);
+      }
+    }
+
+    function toggleSwitcher() {
+      state.switcherOpen = !state.switcherOpen;
+      $('switcherDropdown').classList.toggle('hidden', !state.switcherOpen);
+    }
+    document.addEventListener('click', () => {
+      if (state.switcherOpen) {
+        state.switcherOpen = false;
+        $('switcherDropdown').classList.add('hidden');
+      }
+    });
+
+    async function selectAccount(connectedAccountId) {
+      try {
+        await api('/api/select-account', { method: 'PATCH', body: { userId: state.user.id, connectedAccountId } });
+        state.user.selected_connected_account_id = connectedAccountId;
+        toast('Account switched', 'success');
+        renderSwitcher();
+        await loadLatestReport();
+        renderReport();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    /* ---------- Team ---------- */
+    function currentAccount() {
+      return state.accounts.find(a => a.connected_account_id === state.user?.selected_connected_account_id);
+    }
+
+    async function openTeam() {
+      const acc = currentAccount();
+      if (!acc) { toast('Select an account first', 'error'); return; }
+      $('teamAccountLabel').textContent = '@' + (acc.username || acc.alias || 'Instagram');
+      $('teamMembersList').innerHTML = '<div style="color:var(--muted); font-size:0.85rem;">Loading…</div>';
+      $('teamDevBanner').classList.add('hidden');
+      showSection('teamModal', true);
+      try {
+        const data = await api(`/api/team?userId=${encodeURIComponent(state.user.id)}&connectedAccountId=${encodeURIComponent(acc.connected_account_id)}`);
+        renderTeamMembers(data);
+      } catch (e) {
+        $('teamMembersList').innerHTML = `<div style="color: var(--bad);">${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderTeamMembers(data) {
+      const canManage = data.role === 'owner' || data.role === 'admin';
+      $('teamInviteRow').classList.toggle('hidden', !canManage);
+
+      const rows = [];
+      if (data.owner) {
+        rows.push(`
+          <div class="team-member">
+            <div class="team-member-info">
+              <div class="team-member-email">${escapeHtml(data.owner.email)}<span class="role-badge owner">Owner</span></div>
+              <div class="team-member-meta">Connected this Instagram account</div>
+            </div>
+          </div>
+        `);
+      }
+      for (const m of (data.members || [])) {
+        const editable = canManage && data.role === 'owner';   // only owner can edit roles in this UI
+        const removable = canManage && (data.role === 'owner' || (data.role === 'admin' && m.role === 'viewer'));
+        rows.push(`
+          <div class="team-member" data-id="${escapeAttr(m.id)}">
+            <div class="team-member-info">
+              <div class="team-member-email">${escapeHtml(m.invited_email)}<span class="role-badge ${m.role}">${m.role}</span></div>
+              <div class="team-member-meta">${m.status === 'active' ? 'Active' : 'Invite pending — waiting for sign-in'}</div>
+            </div>
+            ${editable ? `<select data-role-for="${escapeAttr(m.id)}">
+              <option value="viewer" ${m.role === 'viewer' ? 'selected' : ''}>Viewer</option>
+              <option value="admin" ${m.role === 'admin' ? 'selected' : ''}>Admin</option>
+            </select>` : ''}
+            ${removable ? `<button class="remove" data-remove-id="${escapeAttr(m.id)}">Remove</button>` : ''}
+          </div>
+        `);
+      }
+      if (!rows.length) rows.push(`<div style="color:var(--muted); font-size:0.85rem;">No team members yet.</div>`);
+      $('teamMembersList').innerHTML = rows.join('');
+
+      $('teamMembersList').querySelectorAll('select[data-role-for]').forEach(sel => {
+        sel.addEventListener('change', async (e) => {
+          const id = e.target.dataset.roleFor;
+          const role = e.target.value;
+          try {
+            await api(`/api/team/${encodeURIComponent(id)}`, { method: 'PATCH', body: { userId: state.user.id, role } });
+            toast('Role updated', 'success');
+          } catch (err) { toast(err.message, 'error'); openTeam(); }
+        });
+      });
+      $('teamMembersList').querySelectorAll('button[data-remove-id]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.removeId;
+          if (!confirm('Remove this team member?')) return;
+          try {
+            await api(`/api/team/${encodeURIComponent(id)}?userId=${encodeURIComponent(state.user.id)}`, { method: 'DELETE' });
+            toast('Removed', 'success');
+            openTeam();
+          } catch (err) { toast(err.message, 'error'); }
+        });
+      });
+    }
+
+    async function inviteTeamMember() {
+      const acc = currentAccount();
+      if (!acc) return;
+      const email = $('teamInviteEmail').value.trim();
+      const role = $('teamInviteRole').value;
+      if (!email) { toast('Email required', 'error'); return; }
+      try {
+        const result = await api('/api/team/invite', { method: 'POST', body: {
+          userId: state.user.id,
+          connectedAccountId: acc.connected_account_id,
+          email,
+          role
+        }});
+        $('teamInviteEmail').value = '';
+        if (result.devMode) {
+          $('teamDevBanner').innerHTML = `Dev mode (no Resend key) — invite email logged to server console. Tell <b>${escapeHtml(email)}</b> to sign in at this URL.`;
+          $('teamDevBanner').classList.remove('hidden');
+        }
+        toast(result.status === 'active' ? 'Invited (already has an account — instant access)' : 'Invite sent', 'success');
+        openTeam();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    /* ---------- Settings ---------- */
+    async function openSettings() {
+      try {
+        const { settings, defaults } = await api(`/api/settings?userId=${encodeURIComponent(state.user.id)}`);
+        const renderState = (id, mine, fallback) => {
+          const el = $(id);
+          if (mine?.isSet) {
+            el.classList.remove('unset', 'using-default');
+            el.innerHTML = `<b>Your key:</b> ${escapeHtml(mine.preview)}`;
+          } else if (fallback?.isSet) {
+            el.classList.remove('unset');
+            el.classList.add('using-default');
+            el.innerHTML = `<b>Using default (server .env):</b> ${escapeHtml(fallback.preview)}`;
+          } else {
+            el.classList.add('unset');
+            el.classList.remove('using-default');
+            el.innerHTML = `<b>Not configured</b>`;
+          }
+        };
+        renderState('composioState', settings.composioApiKey, defaults.composioApiKey);
+        renderState('anthropicState', settings.anthropicApiKey, defaults.anthropicApiKey);
+        renderState('openaiState', settings.openaiApiKey, defaults.openaiApiKey);
+        renderState('geminiState', settings.geminiApiKey, defaults.geminiApiKey);
+        $('settingsComposio').value = '';
+        $('settingsAnthropic').value = '';
+        $('settingsOpenai').value = '';
+        $('settingsGemini').value = '';
+        $('settingsProvider').value = settings.provider || 'anthropic';
+        showSection('settingsModal', true);
+        setTimeout(() => $('settingsComposio').focus(), 50);
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+
+    async function saveSettings() {
+      const body = { userId: state.user.id };
+      const composio = $('settingsComposio').value.trim();
+      const anthropic = $('settingsAnthropic').value.trim();
+      const openai = $('settingsOpenai').value.trim();
+      const gemini = $('settingsGemini').value.trim();
+      const provider = $('settingsProvider').value || 'anthropic';
+      if (composio) body.composioApiKey = composio;
+      if (anthropic) body.anthropicApiKey = anthropic;
+      if (openai) body.openaiApiKey = openai;
+      if (gemini) body.geminiApiKey = gemini;
+      body.provider = provider;
+      try {
+        await api('/api/settings', { method: 'PUT', body });
+        showSection('settingsModal', false);
+        toast('Settings saved', 'success');
+        await refreshKeyBanner();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+
+    async function refreshKeyBanner() {
+      try {
+        const { settings, defaults } = await api(`/api/settings?userId=${encodeURIComponent(state.user.id)}`);
+        const composioSet = settings.composioApiKey.isSet || defaults.composioApiKey?.isSet;
+        // Only show the banner if (a) user has no accounts yet (they'll need a key to connect one),
+        // or (b) user owns at least one account (their key powers it).
+        // Members-only users (admin/viewer on shared accounts) don't need their own key.
+        const ownsAny = state.accounts.some(a => a.role === 'owner');
+        const noAccounts = state.accounts.length === 0;
+        showSection('keyMissingBanner', !composioSet && (ownsAny || noAccounts));
+      } catch { /* ignore */ }
+    }
+
+    /* ---------- Add account ---------- */
+    function openAdd() {
+      $('addUsername').value = '';
+      showSection('addModal', true);
+      setTimeout(() => $('addUsername').focus(), 50);
+    }
+
+    async function submitAdd() {
+      const username = $('addUsername').value.trim().replace(/^@/, '');
+      if (!username) { toast('Username required', 'error'); return; }
+      try {
+        showSection('addModal', false);
+        toast('Starting Composio auth…', 'info');
+        const { redirectUrl } = await api('/api/connect', { method: 'POST', body: { userId: state.user.id, username } });
+        window.open(redirectUrl, '_blank', 'noopener,noreferrer');
+        toast('Authorize Instagram in the new tab, then click Refresh.', 'info');
+      } catch (e) {
+        if (e.code === 'COMPOSIO_KEY_MISSING') { handleComposioKeyMissing(e.message); return; }
+        toast(e.message, 'error');
+      }
+    }
+
+    /* ---------- Report ---------- */
+    state.reportList = [];
+    state.currentReportId = null;
+
+    async function loadLatestReport() {
+      if (!state.user.selected_connected_account_id) { state.report = null; state.reportList = []; state.currentReportId = null; return; }
+      try {
+        // Pull all reports for this account + the latest one in parallel
+        const [latest, list] = await Promise.all([
+          api(`/api/report/latest?userId=${encodeURIComponent(state.user.id)}&connectedAccountId=${encodeURIComponent(state.user.selected_connected_account_id)}`),
+          api(`/api/reports?userId=${encodeURIComponent(state.user.id)}&connectedAccountId=${encodeURIComponent(state.user.selected_connected_account_id)}`).catch(() => ({ reports: [] }))
+        ]);
+        state.report = latest.report;
+        state.currentReportId = latest.reportId;
+        state.reportList = list.reports || [];
+      } catch (e) { state.report = null; state.reportList = []; state.currentReportId = null; }
+    }
+
+    async function loadReportById(reportId) {
+      try {
+        const { report } = await api(`/api/report/${encodeURIComponent(reportId)}?userId=${encodeURIComponent(state.user.id)}`);
+        state.report = report;
+        state.currentReportId = reportId;
+        renderReport();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function renderReportHistory() {
+      const wrap = $('reportHistoryWrap');
+      const sel = $('reportHistory');
+      if (!state.reportList || state.reportList.length <= 1) {
+        wrap.classList.add('hidden');
+        return;
+      }
+      wrap.classList.remove('hidden');
+      sel.innerHTML = state.reportList.map((r, i) => {
+        const label = `${i === 0 ? 'Latest · ' : ''}${new Date(r.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`;
+        return `<option value="${escapeAttr(r.id)}" ${r.id === state.currentReportId ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+      }).join('');
+    }
+
+    async function generateReport() {
+      if (!state.user?.selected_connected_account_id) { toast('Select an Instagram account first', 'error'); return; }
+      try {
+        const { jobId } = await api('/api/report/start', { method: 'POST', body: { userId: state.user.id, connectedAccountId: state.user.selected_connected_account_id } });
+        window.open(`/generate.html?jobId=${encodeURIComponent(jobId)}`, '_blank', 'noopener');
+        toast('Opened a live progress tab. Reports auto-save when done.', 'info');
+      } catch (e) {
+        if (e.code === 'COMPOSIO_KEY_MISSING') { handleComposioKeyMissing(e.message); return; }
+        toast(e.message, 'error');
+      }
+    }
+
+    window.addEventListener('message', async (event) => {
+      if (event.data?.type === 'reelytics:report-done') {
+        await loadLatestReport();
+        renderReport();
+        toast('Report ready', 'success');
+      }
+    });
+
+    /* ---------- Render ---------- */
+    const TOOLTIPS = {
+      hookScoreNormalized: '<b>Hook score (0-100)</b> · This reel\'s composite hook score, normalized within this report. Top reel = 100, weakest = 0.',
+      hookScore: '<b>Hook score (raw)</b> · <code>watch_s × √reach × (1 + share_pct/100 + save_pct/200)</code>. Higher is better. Scales with reach — not a percentage.',
+      hookRate: '<b>Watch %</b> · <code>watch_s ÷ duration_s × 100</code>. % of the video the average viewer watched. Uses a 30s estimate when Instagram doesn\'t expose duration.',
+      watchSeconds: '<b>Watch s</b> · Average watch time per viewer in seconds (<code>ig_reels_avg_watch_time / 1000</code>).',
+      views: '<b>Views</b> · Total views from Instagram\'s private insights.',
+      reach: '<b>Reach</b> · Unique accounts that saw this reel at least once.',
+      replayRate: '<b>Replay rate</b> · <code>views ÷ reach</code>. 1.2× means viewers averaged 1.2 watches each.',
+      sharePct: '<b>Share %</b> · <code>shares ÷ reach × 100</code>. Above ~2% is unusually strong.',
+      savePct: '<b>Save %</b> · <code>saves ÷ reach × 100</code>. Above ~2% signals high-value content.',
+      engagementRate: '<b>Engagement %</b> · <code>total_interactions ÷ reach × 100</code>. Aggregate reaction rate.',
+      likes: '<b>Likes</b> · Raw like count.',
+      comments: '<b>Comments</b> · Raw comment count.',
+      postedAt: '<b>Posted</b> · Publish date of the reel.',
+      caption: '<b>Reel</b> · Caption preview + permalink. Click the column to sort alphabetically.',
+      projectedViews30d: '<b>Proj. 30d views</b> · <code>views × (30 ÷ days_live)</code>, capped at 5× current views. Estimates where this reel lands by day 30. Older reels show near-current values.',
+      saveShareRatio: '<b>Save : Share</b> · <code>saves ÷ shares</code>. High = utility/reference content people bookmark. Low = social-currency content people forward. Tells you what kind of content this actually is.',
+      engagementVelocity: '<b>Eng velocity</b> · <code>total_interactions ÷ days_live</code>. Fair comparison since reels in this report have been live for different durations.',
+      commentLikeRatio: '<b>C : L ratio</b> · <code>comments ÷ likes</code>. High = sparks discussion. Low = passive scroll-by.',
+      shareSaveLikesRatio: '<b>(S+Sv) : L ratio</b> · <code>(shares + saves) ÷ likes</code>. Likes are cheap; shares + saves indicate real value. Higher = more meaningful engagement per like.',
+      nonFollowerReachPct: '<b>Non-follower reach %</b> · % of reach that came from non-followers. The single best growth signal — high means the algorithm is pushing you to new people.',
+      reachRate: '<b>Reach rate</b> · <code>reach ÷ follower_count × 100</code>. What % of your audience this reel hit. Needs follower_count from INSTAGRAM_GET_IG_USER_INFO.',
+      replaysRaw: '<b>Replays (raw)</b> · <code>clips_replays_count</code> from Instagram. Cleaner separation of "rewatched" vs "viewed once" than views÷reach.',
+      profileActions: '<b>Profile actions</b> · Profile visits + follows + bio-link taps driven by this reel. Your actual conversion path to whatever lives in your bio.'
+    };
+
+    const COLUMNS = [
+      { key: 'caption', label: 'Reel', sort: (r) => (r.caption || r.id || '').toLowerCase() },
+      { key: 'postedAt', label: 'Posted', sort: (r) => new Date(r.postedAt || 0).getTime() },
+      { key: 'hookScoreNormalized', label: 'Hook /100', sort: (r) => r.metrics.hookScoreNormalized ?? 0 },
+      { key: 'hookScore', label: 'Hook raw', sort: (r) => r.metrics.hookScore ?? 0 },
+      { key: 'watchSeconds', label: 'Watch s', sort: (r) => r.metrics.watchSeconds ?? 0 },
+      { key: 'hookRate', label: 'Watch %', sort: (r) => r.metrics.hookRate ?? -1 },
+      { key: 'views', label: 'Views', sort: (r) => r.metrics.views ?? 0 },
+      { key: 'projectedViews30d', label: 'Proj. 30d', sort: (r) => r.metrics.projectedViews30d ?? 0 },
+      { key: 'reach', label: 'Reach', sort: (r) => r.metrics.reach ?? 0 },
+      { key: 'reachRate', label: 'Reach %', sort: (r) => r.metrics.reachRate ?? -1 },
+      { key: 'nonFollowerReachPct', label: 'Non-fol %', sort: (r) => r.metrics.nonFollowerReachPct ?? -1 },
+      { key: 'replaysRaw', label: 'Replays', sort: (r) => r.metrics.replaysRaw ?? 0 },
+      { key: 'replayRate', label: 'Replay×', sort: (r) => r.metrics.replayRate ?? 0 },
+      { key: 'sharePct', label: 'Share %', sort: (r) => r.metrics.sharePct ?? 0 },
+      { key: 'savePct', label: 'Save %', sort: (r) => r.metrics.savePct ?? 0 },
+      { key: 'saveShareRatio', label: 'Save:Share', sort: (r) => r.metrics.saveShareRatio ?? 0 },
+      { key: 'engagementRate', label: 'Eng %', sort: (r) => r.metrics.engagementRate ?? 0 },
+      { key: 'engagementVelocity', label: 'Eng vel', sort: (r) => r.metrics.engagementVelocity ?? 0 },
+      { key: 'commentLikeRatio', label: 'C:L', sort: (r) => r.metrics.commentLikeRatio ?? 0 },
+      { key: 'shareSaveLikesRatio', label: '(S+Sv):L', sort: (r) => r.metrics.shareSaveLikesRatio ?? 0 },
+      { key: 'likes', label: 'Likes', sort: (r) => r.metrics.likes ?? 0 },
+      { key: 'comments', label: 'Comments', sort: (r) => r.metrics.comments ?? 0 },
+      { key: 'profileActions', label: 'Profile acts', sort: (r) => r.metrics.profileActions ?? 0 }
+    ];
+
+    function renderHeadings() {
+      const thead = $('reelsThead');
+      thead.innerHTML = COLUMNS.map(c => {
+        const arrow = state.sort.key === c.key ? `<span class="sort-arrow">${state.sort.dir === 'desc' ? '▼' : '▲'}</span>` : '';
+        const tip = TOOLTIPS[c.key] ? `<span class="info-btn" onclick="event.stopPropagation()">i<span class="tt">${TOOLTIPS[c.key]}</span></span>` : '';
+        return `<th data-key="${c.key}">${c.label} ${tip}${arrow}</th>`;
+      }).join('');
+      thead.querySelectorAll('th').forEach(th => {
+        th.addEventListener('click', () => {
+          const key = th.dataset.key;
+          if (state.sort.key === key) state.sort.dir = state.sort.dir === 'desc' ? 'asc' : 'desc';
+          else { state.sort.key = key; state.sort.dir = key === 'caption' ? 'asc' : 'desc'; }
+          renderReport();
+        });
+      });
+    }
+
+    function backfillTiers(report) {
+      const t = { hot: 0, solid: 0, weak: 0 };
+      for (const r of (report.reels || [])) {
+        const v = r.metrics?.hookScoreNormalized ?? 0;
+        if (v >= 70) t.hot++;
+        else if (v >= 35) t.solid++;
+        else t.weak++;
+      }
+      return t;
+    }
+
+    function backfillReport(report) {
+      // Recompute fields that may be missing in older saved reports.
+      if (!report || !report.reels) return report;
+      const DEFAULT_DUR = 30;
+      const now = Date.now();
+      for (const r of report.reels) {
+        const m = r.metrics || (r.metrics = {});
+        const reach = m.reach ?? 0;
+        const watch = m.watchSeconds ?? 0;
+        const duration = r.durationSeconds || r.effectiveDurationSeconds || DEFAULT_DUR;
+        if (m.hookRate === null || m.hookRate === undefined) {
+          m.hookRate = watch > 0 ? Math.round(Math.min(watch / duration, 5) * 100 * 100) / 100 : 0;
+          m.hookRateEstimated = !r.durationSeconds;
+        }
+        if (m.hookScore === null || m.hookScore === undefined) {
+          const sharePct = m.sharePct ?? (reach > 0 ? ((m.shares ?? 0) / reach) * 100 : 0);
+          const savePct = m.savePct ?? (reach > 0 ? ((m.saves ?? 0) / reach) * 100 : 0);
+          m.hookScore = Math.round(watch * Math.sqrt(Math.max(reach, 0)) * (1 + sharePct / 100 + savePct / 200) * 100) / 100;
+        }
+        // New per-reel metrics (filled for old reports)
+        const postedTs = new Date(r.postedAt || 0).getTime();
+        const daysLive = !Number.isNaN(postedTs) && postedTs > 0 ? Math.max(0.5, (now - postedTs) / 86_400_000) : 0;
+        if (m.daysLive === undefined) m.daysLive = Math.round(daysLive * 10) / 10;
+        if (m.projectedViews30d === undefined) m.projectedViews30d = daysLive > 0 ? Math.round((m.views ?? 0) * Math.min(30 / daysLive, 5)) : (m.views ?? 0);
+        const shares = m.shares ?? 0, saves = m.saves ?? 0, likes = m.likes ?? 0, comments = m.comments ?? 0;
+        const ti = m.totalInteractions ?? (likes + comments + shares + saves);
+        if (m.saveShareRatio === undefined) m.saveShareRatio = shares > 0 ? Math.round((saves / shares) * 100) / 100 : saves;
+        if (m.engagementVelocity === undefined) m.engagementVelocity = daysLive > 0 ? Math.round((ti / daysLive) * 10) / 10 : 0;
+        if (m.commentLikeRatio === undefined) m.commentLikeRatio = likes > 0 ? Math.round((comments / likes) * 1000) / 1000 : 0;
+        if (m.shareSaveLikesRatio === undefined) m.shareSaveLikesRatio = likes > 0 ? Math.round(((shares + saves) / likes) * 1000) / 1000 : 0;
+      }
+      const scores = report.reels.map(r => r.metrics.hookScore ?? 0);
+      const min = Math.min(...scores), max = Math.max(...scores), span = max - min;
+      for (const r of report.reels) {
+        if (r.metrics.hookScoreNormalized === undefined || r.metrics.hookScoreNormalized === null || (span > 0 && r.metrics.hookScoreNormalized === 0 && r.metrics.hookScore !== min)) {
+          r.metrics.hookScoreNormalized = span > 0 ? Math.round(((r.metrics.hookScore - min) / span) * 100 * 10) / 10 : 100;
+        }
+      }
+      report.averages = report.averages || {};
+      const avg = (key) => {
+        const vals = report.reels.map(r => r.metrics[key]).filter(v => typeof v === 'number' && !Number.isNaN(v));
+        return vals.length ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 100) / 100 : 0;
+      };
+      if (report.averages.hookScoreNormalized === undefined || report.averages.hookScoreNormalized === null) report.averages.hookScoreNormalized = avg('hookScoreNormalized');
+      if (report.averages.hookRate === undefined || report.averages.hookRate === null) report.averages.hookRate = avg('hookRate');
+      if (report.averages.hookScore === undefined || report.averages.hookScore === null) report.averages.hookScore = avg('hookScore');
+      if (!report.tiers) report.tiers = backfillTiers(report);
+      return report;
+    }
+
+    function renderReport() {
+      if (!state.report || !state.report.reels?.length) {
+        showSection('reportView', false);
+        if (state.accounts.some(a => a.status === 'active')) {
+          showSection('emptyState', true);
+          $('emptyTitle').textContent = 'No report yet';
+          $('emptyMsg').textContent = 'Click "Generate report" to pull your latest reels and run the analysis.';
+          $('emptyAddBtn').classList.add('hidden');
+        }
+        return;
+      }
+
+      $('emptyAddBtn').classList.remove('hidden');
+      showSection('emptyState', false);
+      showSection('reportView', true);
+
+      const r = backfillReport(state.report);
+      const selected = state.accounts.find(a => a.connected_account_id === state.user.selected_connected_account_id);
+      const handle = r.accountUsername || selected?.username || selected?.alias || '';
+      $('mainTitle').innerHTML = handle ? `<span class="account-handle">@${escapeHtml(handle)}</span>` : 'Your dashboard';
+      $('mainSubtitle').textContent = `${r.dateRange || 'Last 30 days'} · ${r.reelCount} reels · generated ${fmtDate(r.reportGeneratedAt)}`;
+      renderReportHistory();
+
+      // Action headline (team brief)
+      renderActionHeadline(r.suggestions);
+
+      // Stats with hover info tooltips
+      const tiers = r.tiers || backfillTiers(r);
+      const followerSuffix = r.followerCount ? ` · ${fmtNum(r.followerCount)} followers` : '';
+      const stats = [
+        { label: 'Reels', value: fmtNum(r.reelCount), tip: `<b>Reels</b> · Reels analyzed in the date range. Posting velocity: <b>${r.reelsPerWeek ?? '—'}</b> reels/week${followerSuffix}.` },
+        { label: 'Total views', value: fmtNum(r.totals.views), tip: '<b>Total views</b> · Sum of views across every reel.' },
+        { label: 'Total reach', value: fmtNum(r.totals.reach), tip: '<b>Total reach</b> · Sum of unique-account reach across every reel.' },
+        { label: 'Avg hook /100', value: fmtNum(r.averages.hookScoreNormalized), tip: TOOLTIPS.hookScoreNormalized + ' This card is the average across all reels.' },
+        { label: 'Avg hook %', value: fmtPct(r.averages.hookRate ?? 0), tip: TOOLTIPS.hookRate },
+        { label: 'Avg watch (s)', value: fmtNum(r.averages.watchSeconds), tip: TOOLTIPS.watchSeconds },
+        { label: 'Avg engagement', value: fmtPct(r.averages.engagementRate), tip: TOOLTIPS.engagementRate },
+        { label: 'Hot / Solid / Weak', value: `${tiers.hot} / ${tiers.solid} / ${tiers.weak}`, tip: `<b>Score tiers</b> · How many of your ${r.reelCount} reels fell into each performance bucket based on Hook /100. <br/><b>Hot</b> ≥ 70 (top performers), <b>Solid</b> 35–69 (middle), <b>Weak</b> &lt; 35 (underperformers). Helps you see if you're shipping a few hits or consistent mid-tier.` }
+      ];
+      $('statsGrid').innerHTML = stats.map(s => `
+        <div class="stat">
+          <div class="stat-label">${s.label} ${s.tip ? `<span class="info-btn">i<span class="tt">${s.tip}</span></span>` : ''}</div>
+          <div class="stat-value">${s.value}</div>
+        </div>
+      `).join('');
+
+      // Suggestions
+      renderSuggestions(r.suggestions);
+
+      // Trends (time series + day-of-week + caption breakdown)
+      renderTrends(r);
+
+      // Sort reels
+      const col = COLUMNS.find(c => c.key === state.sort.key) || COLUMNS[2];
+      const sortFn = col.sort;
+      const sorted = [...r.reels].sort((a, b) => {
+        const av = sortFn(a), bv = sortFn(b);
+        if (typeof av === 'string') return state.sort.dir === 'desc' ? bv.localeCompare(av) : av.localeCompare(bv);
+        return state.sort.dir === 'desc' ? bv - av : av - bv;
+      });
+
+      // Top 5 by hook score (always)
+      const top = [...r.reels].sort((a, b) => b.metrics.hookScore - a.metrics.hookScore).slice(0, 5);
+      $('topReels').innerHTML = top.map((reel, i) => {
+        const hasThumb = !!(reel.localThumbnail || reel.thumbnailUrl);
+        return `
+        <a class="top-reel ${hasThumb ? '' : 'compact'}" href="${escapeAttr(reel.permalink || '#')}" target="_blank" rel="noopener">
+          ${thumbnailHtml(reel, 'top')}
+          <div class="top-reel-overlay">
+            <div class="top-reel-rank">#${i + 1}</div>
+            <div class="top-reel-score">${fmtNum(reel.metrics.hookScoreNormalized)}<small>hook /100</small></div>
+            <div class="top-reel-meta">
+              <span>${fmtNum(reel.metrics.views)} views</span>
+              <span>${fmtNum(reel.metrics.reach)} reach</span>
+              <span>${fmtNum(reel.metrics.watchSeconds)}s watch</span>
+            </div>
+          </div>
+        </a>
+      `;}).join('');
+
+      // Headings + body
+      renderHeadings();
+      $('reelsTbody').innerHTML = sorted.map(reel => `
+        <tr data-permalink="${escapeAttr(reel.permalink || '')}">
+          <td>
+            <div class="thumb-cell">
+              ${thumbnailHtml(reel, 'cell')}
+              <span class="caption">${escapeHtml((reel.caption || '').slice(0, 120) || '(no caption)')}</span>
+              ${reel.permalink ? '<span class="external">↗</span>' : ''}
+            </div>
+          </td>
+          <td><span class="num">${fmtDate(reel.postedAt)}</span></td>
+          <td><span class="pill ${pillFor(reel.metrics.hookScoreNormalized, { good: 70, warn: 35 })}">${fmtNum(reel.metrics.hookScoreNormalized)}</span></td>
+          <td class="num">${fmtNum(reel.metrics.hookScore)}</td>
+          <td class="num">${fmtNum(reel.metrics.watchSeconds)}</td>
+          <td class="num">${fmtPct(reel.metrics.hookRate ?? 0)}${reel.metrics.hookRateEstimated ? '<span class="estimated-flag" title="Estimated — Instagram did not return video_duration; using 30s.">~</span>' : ''}</td>
+          <td class="num">${fmtNum(reel.metrics.views)}</td>
+          <td class="num">${fmtNum(reel.metrics.projectedViews30d)}</td>
+          <td class="num">${fmtNum(reel.metrics.reach)}</td>
+          <td class="num">${reel.metrics.reachRate == null ? '—' : fmtPct(reel.metrics.reachRate)}</td>
+          <td class="num">${reel.metrics.nonFollowerReachPct == null ? '—' : fmtPct(reel.metrics.nonFollowerReachPct)}</td>
+          <td class="num">${fmtNum(reel.metrics.replaysRaw)}</td>
+          <td class="num">${fmtNum(reel.metrics.replayRate)}×</td>
+          <td class="num">${fmtPct(reel.metrics.sharePct)}</td>
+          <td class="num">${fmtPct(reel.metrics.savePct)}</td>
+          <td class="num">${fmtNum(reel.metrics.saveShareRatio)}</td>
+          <td class="num">${fmtPct(reel.metrics.engagementRate)}</td>
+          <td class="num">${fmtNum(reel.metrics.engagementVelocity)}</td>
+          <td class="num">${fmtNum(reel.metrics.commentLikeRatio)}</td>
+          <td class="num">${fmtNum(reel.metrics.shareSaveLikesRatio)}</td>
+          <td class="num">${fmtNum(reel.metrics.likes)}</td>
+          <td class="num">${fmtNum(reel.metrics.comments)}</td>
+          <td class="num">${fmtNum(reel.metrics.profileActions)}</td>
+        </tr>
+      `).join('');
+
+      $('reelsTbody').querySelectorAll('tr').forEach(tr => {
+        tr.addEventListener('click', (e) => {
+          // Ignore clicks on tooltips/links inside the row
+          if (e.target.closest('a')) return;
+          const url = tr.dataset.permalink;
+          if (url) window.open(url, '_blank', 'noopener,noreferrer');
+        });
+      });
+    }
+
+    function thumbnailHtml(reel, variant) {
+      const local = reel.localThumbnail;
+      const remote = reel.thumbnailUrl;
+      if (!local && !remote) return variant === 'top' ? `<div class="placeholder">No thumbnail</div>` : `<div class="ph"></div>`;
+      const remoteAttr = remote ? `data-remote="${escapeAttr(remote)}"` : '';
+      const placeholderClass = variant === 'top' ? 'placeholder' : 'ph';
+      const placeholderText = variant === 'top' ? 'No thumbnail' : '';
+      // Try local first, then the remote IG CDN URL (with no-referrer to bypass IG\'s referer blocking), then placeholder.
+      return `<img src="${escapeAttr(local || remote)}" alt="" referrerpolicy="no-referrer" loading="lazy" ${remoteAttr} data-placeholder-class="${placeholderClass}" data-placeholder-text="${escapeAttr(placeholderText)}" onerror="onThumbError(this)" />`;
+    }
+
+    window.onThumbError = function(img) {
+      if (img.dataset.remote && img.src !== img.dataset.remote) {
+        img.src = img.dataset.remote;
+        img.dataset.remote = '';
+        return;
+      }
+      const ph = document.createElement('div');
+      ph.className = img.dataset.placeholderClass || 'ph';
+      ph.textContent = img.dataset.placeholderText || '';
+      img.replaceWith(ph);
+    };
+
+    /* ---------- Charts ---------- */
+    const DOW_LABELS_C = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const CTA_REGEX_C = /\b(comment|dm me|dm us|link in bio|click|tap|reply|share this|save this|follow|tag)\b/i;
+    const EMOJI_REGEX_C = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}]/gu;
+
+    function backfillAnalysis(report) {
+      if (report.analysis && report.analysis.timeSeries?.length) return report.analysis;
+      const reels = report.reels || [];
+
+      const ts = reels
+        .map(r => ({
+          id: r.id,
+          date: r.postedAt,
+          hookScoreNormalized: r.metrics.hookScoreNormalized ?? 0,
+          hookScore: r.metrics.hookScore ?? 0,
+          views: r.metrics.views ?? 0,
+          reach: r.metrics.reach ?? 0,
+          watchSeconds: r.metrics.watchSeconds ?? 0,
+          caption: (r.caption || '').slice(0, 60)
+        }))
+        .filter(p => p.date && !Number.isNaN(new Date(p.date).getTime()))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      const rolling = ts.map((p, i) => {
+        const w = ts.slice(Math.max(0, i - 2), i + 1);
+        const avg = w.reduce((s, x) => s + x.hookScoreNormalized, 0) / w.length;
+        return { ...p, rolling: Math.round(avg * 10) / 10 };
+      });
+
+      const dayBuckets = Array.from({ length: 7 }, () => ({ count: 0, sumHook: 0, sumViews: 0, sumWatch: 0 }));
+      for (const r of reels) {
+        const d = new Date(r.postedAt);
+        if (Number.isNaN(d.getTime())) continue;
+        const dow = d.getDay();
+        dayBuckets[dow].count++;
+        dayBuckets[dow].sumHook += r.metrics.hookScoreNormalized ?? 0;
+        dayBuckets[dow].sumViews += r.metrics.views ?? 0;
+        dayBuckets[dow].sumWatch += r.metrics.watchSeconds ?? 0;
+      }
+      const dayOfWeek = dayBuckets.map((b, i) => ({
+        day: i,
+        label: DOW_LABELS_C[i],
+        count: b.count,
+        avgHookNormalized: b.count ? Math.round(b.sumHook / b.count * 10) / 10 : null,
+        avgViews: b.count ? Math.round(b.sumViews / b.count) : null,
+        avgWatch: b.count ? Math.round(b.sumWatch / b.count * 100) / 100 : null
+      }));
+
+      const lengthBuckets = [
+        { label: 'Short (<60 chars)', min: 0, max: 60, count: 0, sumHook: 0 },
+        { label: 'Medium (60–150)', min: 60, max: 150, count: 0, sumHook: 0 },
+        { label: 'Long (150+)', min: 150, max: Infinity, count: 0, sumHook: 0 }
+      ];
+      let withCTA = { count: 0, sumHook: 0 }, noCTA = { count: 0, sumHook: 0 };
+      let totalH = 0, totalE = 0;
+      for (const r of reels) {
+        const cap = r.caption || '';
+        const len = cap.length;
+        const hook = r.metrics.hookScoreNormalized ?? 0;
+        totalH += (cap.match(/#\w+/g) || []).length;
+        totalE += (cap.match(EMOJI_REGEX_C) || []).length;
+        for (const b of lengthBuckets) if (len >= b.min && len < b.max) { b.count++; b.sumHook += hook; break; }
+        const t = CTA_REGEX_C.test(cap) ? withCTA : noCTA;
+        t.count++; t.sumHook += hook;
+      }
+      const captionBuckets = {
+        byLength: lengthBuckets.map(b => ({ bucket: b.label, count: b.count, avgHook: b.count ? Math.round(b.sumHook / b.count * 10) / 10 : null })),
+        byCTA: [
+          { label: 'Has CTA', count: withCTA.count, avgHook: withCTA.count ? Math.round(withCTA.sumHook / withCTA.count * 10) / 10 : null },
+          { label: 'No CTA', count: noCTA.count, avgHook: noCTA.count ? Math.round(noCTA.sumHook / noCTA.count * 10) / 10 : null }
+        ],
+        hashtagsAvg: reels.length ? Math.round(totalH / reels.length * 10) / 10 : 0,
+        emojisAvg: reels.length ? Math.round(totalE / reels.length * 10) / 10 : 0
+      };
+
+      return { timeSeries: rolling, dayOfWeek, captionBuckets };
+    }
+
+    const TREND_TABS = [
+      { id: 'hook', label: 'Hook /100', kind: 'time', key: 'hookScoreNormalized', yMax: 100, valueFmt: (v) => v, tipLabel: 'Hook /100' },
+      { id: 'views', label: 'Views', kind: 'time', key: 'views', yMax: null, valueFmt: fmtNum, tipLabel: 'Views' },
+      { id: 'reach', label: 'Reach', kind: 'time', key: 'reach', yMax: null, valueFmt: fmtNum, tipLabel: 'Reach' },
+      { id: 'watch', label: 'Watch s', kind: 'time', key: 'watchSeconds', yMax: null, valueFmt: (v) => v?.toFixed?.(2) ?? v, tipLabel: 'Watch s' },
+      { id: 'dow', label: 'Day of week', kind: 'dow' },
+      { id: 'cap', label: 'Caption patterns', kind: 'caption' }
+    ];
+
+    state.trendsTab = 'hook';
+
+    function renderTrends(report) {
+      const a = backfillAnalysis(report);
+      const block = $('trendsBlock');
+      if (!a.timeSeries?.length) { block.classList.add('hidden'); return; }
+      block.classList.remove('hidden');
+
+      // tabs
+      $('trendsTabs').innerHTML = TREND_TABS.map(t =>
+        `<button class="trends-tab ${state.trendsTab === t.id ? 'active' : ''}" data-tab="${t.id}">${escapeHtml(t.label)}</button>`
+      ).join('');
+      $('trendsTabs').querySelectorAll('.trends-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.trendsTab = btn.dataset.tab;
+          renderTrends(report);
+        });
+      });
+
+      const cfg = TREND_TABS.find(t => t.id === state.trendsTab) || TREND_TABS[0];
+      if (cfg.kind === 'time') {
+        const oldest = fmtDate(a.timeSeries[0].date);
+        const newest = fmtDate(a.timeSeries[a.timeSeries.length - 1].date);
+        $('trendsSub').textContent = `${a.timeSeries.length} reels · ${oldest} → ${newest}`;
+        drawTimeChart(a.timeSeries, cfg);
+      } else if (cfg.kind === 'dow') {
+        const best = [...a.dayOfWeek].filter(d => d.count).sort((x, y) => (y.avgHookNormalized ?? 0) - (x.avgHookNormalized ?? 0))[0];
+        $('trendsSub').textContent = best ? `Best day: ${best.label} · avg hook ${best.avgHookNormalized}` : '';
+        drawDayOfWeekChart(a.dayOfWeek);
+      } else if (cfg.kind === 'caption') {
+        $('trendsSub').textContent = `${a.captionBuckets.hashtagsAvg} hashtags / ${a.captionBuckets.emojisAvg} emojis avg per caption`;
+        drawCaptionChart(a.captionBuckets);
+      }
+    }
+
+    function drawTimeChart(points, cfg) {
+      const w = 800, h = 240, mL = 44, mR = 14, mT = 14, mB = 30;
+      const xs = points.map(p => new Date(p.date).getTime());
+      const xMin = Math.min(...xs), xMax = Math.max(...xs);
+      const xRange = (xMax - xMin) || 1;
+      const sx = (t) => mL + ((t - xMin) / xRange) * (w - mL - mR);
+      const ys = points.map(p => Number(p[cfg.key]) || 0);
+      const yMax = cfg.yMax ?? Math.max(1, ...ys) * 1.08;
+      const sy = (v) => h - mB - (v / yMax) * (h - mT - mB);
+
+      const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${sx(xs[i])},${sy(ys[i])}`).join(' ');
+      const areaPath = linePath + ` L${sx(xs[xs.length - 1])},${h - mB} L${sx(xs[0])},${h - mB} Z`;
+
+      const tickCount = 5;
+      const yTicks = Array.from({ length: tickCount }, (_, i) => Math.round((yMax / (tickCount - 1)) * i)).map(v => `
+        <g class="chart-grid"><line x1="${mL}" x2="${w - mR}" y1="${sy(v)}" y2="${sy(v)}"></line></g>
+        <text class="chart-axis" x="${mL - 6}" y="${sy(v) + 3}" text-anchor="end">${cfg.id === 'views' || cfg.id === 'reach' ? fmtNum(v) : v}</text>
+      `).join('');
+
+      const xTickCount = Math.min(6, points.length);
+      const xTicks = [];
+      for (let i = 0; i < xTickCount; i++) {
+        const idx = Math.round((i / Math.max(1, xTickCount - 1)) * (points.length - 1));
+        xTicks.push(`<text class="chart-axis" x="${sx(xs[idx])}" y="${h - mB + 16}" text-anchor="middle">${fmtDate(points[idx].date)}</text>`);
+      }
+
+      const dots = points.map((p, i) => `<circle class="chart-dot" cx="${sx(xs[i])}" cy="${sy(ys[i])}" r="4" data-i="${i}"></circle>`).join('');
+
+      $('trendsChart').innerHTML = `
+        <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="chart-gradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.55"/>
+              <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          ${yTicks}
+          ${xTicks.join('')}
+          <path class="chart-area" d="${areaPath}"></path>
+          <path class="chart-line" d="${linePath}"></path>
+          ${dots}
+        </svg>
+      `;
+
+      const svg = $('trendsChart').querySelector('svg');
+      svg.querySelectorAll('.chart-dot').forEach(dot => {
+        dot.addEventListener('mouseenter', (e) => {
+          const i = Number(dot.dataset.i);
+          const p = points[i];
+          const v = cfg.valueFmt(p[cfg.key]);
+          showChartTooltip(e, `<b>${fmtDate(p.date)}</b><br/>${cfg.tipLabel}: ${v}<br/>${fmtNum(p.views)} views · ${fmtNum(p.reach)} reach`);
+        });
+        dot.addEventListener('mouseleave', hideChartTooltip);
+      });
+    }
+
+    function drawDayOfWeekChart(days) {
+      const w = 800, h = 240, mL = 30, mR = 14, mT = 18, mB = 32;
+      const max = Math.max(1, ...days.map(d => d.avgHookNormalized ?? 0));
+      const barW = (w - mL - mR) / days.length * 0.7;
+      const slot = (w - mL - mR) / days.length;
+      const sy = (v) => h - mB - (v / max) * (h - mT - mB);
+
+      const bars = days.map((d, i) => {
+        const x = mL + slot * i + (slot - barW) / 2;
+        const val = d.avgHookNormalized ?? 0;
+        const y = sy(val);
+        return `
+          <rect class="chart-bar ${d.count ? '' : 'empty'}" x="${x}" y="${y}" width="${barW}" height="${h - mB - y}" rx="4" data-i="${i}"></rect>
+          ${d.count ? `<text class="chart-axis" x="${x + barW / 2}" y="${y - 4}" text-anchor="middle" style="fill: var(--text); font-size: 11px; font-weight: 700;">${val}</text>` : ''}
+          <text class="chart-axis" x="${x + barW / 2}" y="${h - mB + 16}" text-anchor="middle">${d.label}</text>
+        `;
+      }).join('');
+
+      $('trendsChart').innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">${bars}</svg>`;
+
+      const svg = $('trendsChart').querySelector('svg');
+      svg.querySelectorAll('.chart-bar').forEach(bar => {
+        bar.addEventListener('mouseenter', (e) => {
+          const d = days[Number(bar.dataset.i)];
+          if (!d.count) return showChartTooltip(e, `<b>${d.label}</b><br/>No reels posted`);
+          showChartTooltip(e, `<b>${d.label}</b> · ${d.count} reel${d.count > 1 ? 's' : ''}<br/>Avg hook /100: ${d.avgHookNormalized}<br/>Avg views: ${fmtNum(d.avgViews)}`);
+        });
+        bar.addEventListener('mouseleave', hideChartTooltip);
+      });
+    }
+
+    function drawCaptionChart(buckets) {
+      const items = [...buckets.byLength, ...buckets.byCTA].filter(b => b.count);
+      if (!items.length) { $('trendsChart').innerHTML = '<div style="color:var(--muted); font-size:0.85rem;">No caption data</div>'; return; }
+      // Reference = average hook /100 across all reels (each bucket compared vs this).
+      // Green = "do more of" (above-average), red = "do less of" (below-average), neutral within ±10% of avg.
+      const overallAvg = items.reduce((s, b) => s + (b.avgHook ?? 0) * b.count, 0) / items.reduce((s, b) => s + b.count, 0);
+      const colorFor = (val) => {
+        if (overallAvg === 0) return 'var(--accent)';
+        const ratio = val / overallAvg;
+        if (ratio >= 1.1) return 'var(--good)';
+        if (ratio <= 0.9) return 'var(--bad)';
+        return 'var(--muted)';
+      };
+
+      // Smaller chart: tighter rows, shorter overall height
+      const rowH = 26;
+      const w = 500, h = items.length * rowH + 36, mL = 140, mR = 80, mT = 18;
+      const max = Math.max(1, ...items.map(b => b.avgHook ?? 0));
+      const sx = (v) => mL + (v / max) * (w - mL - mR);
+      const avgX = sx(overallAvg);
+
+      const rows = items.map((b, i) => {
+        const y = mT + i * rowH;
+        const val = b.avgHook ?? 0;
+        const label = b.bucket || b.label;
+        const fill = colorFor(val);
+        return `
+          <text x="${mL - 8}" y="${y + 14}" text-anchor="end" style="fill: var(--text); font-size: 11px;">${escapeHtml(label)}</text>
+          <rect x="${mL}" y="${y + 4}" width="${Math.max(2, sx(val) - mL)}" height="16" rx="3" style="fill: ${fill}; opacity: 0.85;"></rect>
+          <text x="${sx(val) + 6}" y="${y + 16}" style="fill: var(--text); font-size: 10.5px; font-weight: 700;">${val}<tspan dx="6" style="fill: var(--muted); font-weight: 500;">· ${b.count} reel${b.count > 1 ? 's' : ''}</tspan></text>
+        `;
+      }).join('');
+
+      // Average reference line
+      const refLine = `
+        <line x1="${avgX}" x2="${avgX}" y1="${mT - 4}" y2="${h - 18}" style="stroke: var(--muted); stroke-dasharray: 3 3; opacity: 0.6;"></line>
+        <text x="${avgX}" y="${h - 6}" text-anchor="middle" style="fill: var(--muted); font-size: 9.5px;">overall avg ${Math.round(overallAvg * 10) / 10}</text>
+      `;
+
+      // Legend
+      const legend = `
+        <text x="${mL}" y="${mT - 6}" style="fill: var(--muted); font-size: 9.5px;">
+          <tspan style="fill: var(--good); font-weight: 700;">■</tspan> do more of
+          <tspan dx="10" style="fill: var(--bad); font-weight: 700;">■</tspan> do less of
+          <tspan dx="10" style="fill: var(--muted); font-weight: 700;">■</tspan> neutral
+          <tspan dx="14" style="fill: var(--muted);">— numbers are avg Hook /100 (higher = better)</tspan>
+        </text>
+      `;
+
+      $('trendsChart').innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" style="max-height: 240px;">${legend}${refLine}${rows}</svg>`;
+    }
+
+    let chartTooltipEl = null;
+    function showChartTooltip(event, html) {
+      if (!chartTooltipEl) {
+        chartTooltipEl = document.createElement('div');
+        chartTooltipEl.className = 'chart-tooltip';
+        document.body.appendChild(chartTooltipEl);
+      }
+      chartTooltipEl.innerHTML = html;
+      chartTooltipEl.classList.add('show');
+      const rect = event.target.getBoundingClientRect();
+      chartTooltipEl.style.left = `${rect.left + window.scrollX + rect.width / 2 - chartTooltipEl.offsetWidth / 2}px`;
+      chartTooltipEl.style.top = `${rect.top + window.scrollY - chartTooltipEl.offsetHeight - 8}px`;
+    }
+    function hideChartTooltip() {
+      if (chartTooltipEl) chartTooltipEl.classList.remove('show');
+    }
+
+    function renderActionHeadline(suggestions) {
+      const block = $('actionHeadlineBlock');
+      const text = suggestions?.actionHeadline || suggestions?.summary;
+      if (!text) { block.classList.add('hidden'); return; }
+      block.classList.remove('hidden');
+      $('actionHeadlineText').textContent = text;
+    }
+
+    function renderSuggestions(suggestions) {
+      const block = $('suggestionsBlock');
+      const grid = $('suggestionsGrid');
+      if (!suggestions || (!suggestions.doMoreOf?.length && !suggestions.doLessOf?.length)) {
+        block.classList.add('hidden');
+        return;
+      }
+      block.classList.remove('hidden');
+      const summary = suggestions.summary ? `<div class="suggestions-summary">${escapeHtml(suggestions.summary)}</div>` : '';
+      const list = (items, kind) => (items || []).map(it => `
+        <li class="sugg-item">
+          <div class="sugg-title">${escapeHtml(it.title || '')}</div>
+          <div class="sugg-why">${escapeHtml(it.reasoning || '')}</div>
+        </li>
+      `).join('');
+      grid.innerHTML = `
+        ${summary}
+        <div class="sugg-card more">
+          <h3><span class="pill-icon">Do more</span> Patterns to lean into</h3>
+          <ul class="sugg-list">${list(suggestions.doMoreOf)}</ul>
+        </div>
+        <div class="sugg-card less">
+          <h3><span class="pill-icon">Do less</span> Patterns to cut</h3>
+          <ul class="sugg-list">${list(suggestions.doLessOf)}</ul>
+        </div>
+      `;
+    }
+
+    /* ---------- Utils ---------- */
+    function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+    function escapeAttr(s) { return escapeHtml(s); }
+
+    /* ---------- Init / events ---------- */
+    $('navLogin').addEventListener('click', openAuth);
+    $('heroStart').addEventListener('click', openAuth);
+    $('authCancel').addEventListener('click', () => showSection('authModal', false));
+    $('authSubmit').addEventListener('click', submitAuth);
+    $('authEmail').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitAuth(); });
+    $('authName').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitAuth(); });
+    $('authCodeSubmit').addEventListener('click', verifyAuthCode);
+    $('authCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') verifyAuthCode(); });
+    $('authCodeBack').addEventListener('click', backToEmailStep);
+    $('authResendCode').addEventListener('click', (e) => { e.preventDefault(); resendAuthCode(); });
+    $('teamBtn').addEventListener('click', openTeam);
+    $('pdfBtn').addEventListener('click', downloadPdf);
+    $('reportHistory').addEventListener('change', (e) => loadReportById(e.target.value));
+
+    function addCanvasToPdf(pdf, canvas, jpegQuality = 0.92) {
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgW = pageW;
+      const imgH = (canvas.height * imgW) / canvas.width;
+      const imgData = canvas.toDataURL('image/jpeg', jpegQuality);
+      let heightLeft = imgH;
+      let position = 0;
+      pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
+      heightLeft -= pageH;
+      while (heightLeft > 0) {
+        position -= pageH;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
+        heightLeft -= pageH;
+      }
+    }
+
+    async function snapshot(el) {
+      return window.html2canvas(el, {
+        backgroundColor: '#0a0a0f',
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        windowWidth: el.scrollWidth,
+        windowHeight: el.scrollHeight
+      });
+    }
+
+    async function downloadPdf() {
+      if (!state.report) { toast('Generate a report first', 'error'); return; }
+      if (typeof window.html2canvas !== 'function' || !window.jspdf) {
+        toast('PDF libraries still loading — try again in a second', 'error');
+        return;
+      }
+      const btn = $('pdfBtn');
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loader"></span> Capturing…';
+
+      const originalTab = state.trendsTab;
+      try {
+        $('switcherDropdown').classList.add('hidden');
+
+        // 1) Snapshot the main page with the currently-active Trends tab in place.
+        const main = document.querySelector('.main');
+        const mainCanvas = await snapshot(main);
+
+        // 2) For every other Trends tab, switch + capture just the Trends section.
+        const trendsBlock = $('trendsBlock');
+        const additionalCanvases = [];
+        if (trendsBlock && !trendsBlock.classList.contains('hidden')) {
+          for (const tab of TREND_TABS) {
+            if (tab.id === originalTab) continue;
+            btn.innerHTML = `<span class="loader"></span> Capturing ${tab.label}…`;
+            state.trendsTab = tab.id;
+            renderTrends(state.report);
+            // Wait one paint frame + a beat for SVG layout to settle
+            await new Promise(r => requestAnimationFrame(() => setTimeout(r, 80)));
+            const canvas = await snapshot(trendsBlock);
+            additionalCanvases.push({ label: tab.label, canvas });
+          }
+          // Restore the user's selected tab
+          state.trendsTab = originalTab;
+          renderTrends(state.report);
+        }
+
+        // 3) Build the PDF
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        addCanvasToPdf(pdf, mainCanvas);
+        for (const { canvas } of additionalCanvases) {
+          pdf.addPage();
+          addCanvasToPdf(pdf, canvas);
+        }
+
+        const handle = state.report.accountUsername
+          || state.accounts.find(a => a.connected_account_id === state.user.selected_connected_account_id)?.username
+          || 'report';
+        pdf.save(`reelytics-${handle}-${new Date().toISOString().slice(0,10)}.pdf`);
+        toast(`PDF downloaded (${1 + additionalCanvases.length} chart view${additionalCanvases.length ? 's' : ''})`, 'success');
+      } catch (e) {
+        // Restore tab even if capture failed mid-way
+        state.trendsTab = originalTab;
+        try { renderTrends(state.report); } catch {}
+        toast('PDF failed: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
+    }
+    $('teamClose').addEventListener('click', () => showSection('teamModal', false));
+    $('teamInviteBtn').addEventListener('click', inviteTeamMember);
+    $('teamInviteEmail').addEventListener('keydown', (e) => { if (e.key === 'Enter') inviteTeamMember(); });
+
+    $('addCancel').addEventListener('click', () => showSection('addModal', false));
+    $('addSubmit').addEventListener('click', submitAdd);
+    $('addUsername').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitAdd(); });
+
+    $('switcher').addEventListener('click', (e) => { e.stopPropagation(); toggleSwitcher(); });
+    $('emptyAddBtn').addEventListener('click', openAdd);
+    $('logoutBtn').addEventListener('click', logout);
+    $('settingsBtn').addEventListener('click', openSettings);
+    $('settingsCancel').addEventListener('click', () => showSection('settingsModal', false));
+    $('settingsSave').addEventListener('click', saveSettings);
+    $('keyMissingOpenSettings').addEventListener('click', openSettings);
+    $('generateBtn').addEventListener('click', generateReport);
+
+    async function init() {
+      const storedId = localStorage.getItem(STORAGE_KEY);
+      if (storedId) {
+        try { await loadDashboard(storedId); return; }
+        catch (e) { localStorage.removeItem(STORAGE_KEY); }
+      }
+      if (window.location.pathname === '/app') openAuth();
+    }
+
+    init();
+  </script>
+</body>
+</html>

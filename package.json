@@ -1,0 +1,22 @@
+{
+  "name": "reelytics",
+  "version": "0.2.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "tsx server.ts",
+    "dev": "tsx watch server.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.2.141",
+    "@composio/core": "0.10.0",
+    "@supabase/supabase-js": "^2.105.4",
+    "dotenv": "^16.1.4",
+    "express": "^5.2.1",
+    "tsx": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.8.0"
+  }
+}
