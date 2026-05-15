@@ -127,7 +127,44 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const app = express();
 app.use(express.json({ limit: '5mb' }));
 app.use(express.static(PUBLIC_DIR));
-app.use('/thumbs', express.static(THUMBS_DIR));
+app.use('/thumbs', express.static(THUMBS_DIR, { fallthrough: true, maxAge: '7d' }));
+
+// Self-healing thumbnail fallback: if the local file is missing, look up the reel's
+// original thumbnailUrl from any saved report and re-fetch it once. This handles
+// Railway's ephemeral filesystem (every redeploy wipes ./thumbs/) and Instagram CDN
+// URL expiry. Concurrent requests for the same id are de-duped.
+const inflightThumbFetches = new Map<string, Promise<boolean>>();
+app.get('/thumbs/:filename', async (req, res) => {
+  const filename = req.params.filename;
+  if (!/^[a-zA-Z0-9_\-]+\.jpg$/i.test(filename)) return res.status(404).end();
+  const idKey = filename.replace(/\.jpg$/i, '');
+  const filepath = path.join(THUMBS_DIR, `${idKey}.jpg`);
+
+  let pending = inflightThumbFetches.get(idKey);
+  if (!pending) {
+    pending = (async () => {
+      const { data: recent } = await supabase
+        .from('reports')
+        .select('data')
+        .order('created_at', { ascending: false })
+        .limit(30);
+      let url: string | null = null;
+      for (const r of (recent ?? [])) {
+        const reels = (r.data as any)?.reels ?? [];
+        const hit = reels.find((x: any) => sanitize(x.id) === idKey || x.id === idKey);
+        if (hit?.thumbnailUrl) { url = hit.thumbnailUrl; break; }
+      }
+      if (!url) return false;
+      const result = await downloadOne(idKey, url);
+      return result.ok;
+    })();
+    inflightThumbFetches.set(idKey, pending);
+    pending.finally(() => inflightThumbFetches.delete(idKey));
+  }
+  const ok = await pending;
+  if (ok) return res.sendFile(filepath);
+  return res.status(404).end();
+});
 
 // SPA routes — serve index.html for both / and /app
 app.get(['/app', '/dashboard'], (_req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
