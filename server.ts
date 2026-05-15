@@ -824,6 +824,26 @@ app.get('/api/report/latest', async (req, res) => {
   return res.json({ report: data?.[0]?.data ?? null, createdAt: data?.[0]?.created_at ?? null, reportId: data?.[0]?.id ?? null });
 });
 
+app.delete('/api/report/:reportId', async (req, res) => {
+  try {
+    const userId = String(req.query.userId ?? '');
+    const reportId = req.params.reportId;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+
+    const { data: report } = await supabase.from('reports').select('*').eq('id', reportId).single();
+    if (!report) return res.status(404).json({ error: 'report not found' });
+
+    const role = await getRoleForAccount(userId, report.connected_account_id);
+    if (role !== 'owner' && role !== 'admin') return res.status(403).json({ error: 'Only owner/admin can delete reports' });
+
+    const { error } = await supabase.from('reports').delete().eq('id', reportId);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
 // Note: registered AFTER /api/report/latest so Express matches the literal path first.
 app.get('/api/report/:reportId', async (req, res) => {
   const userId = String(req.query.userId ?? '');
@@ -865,7 +885,7 @@ async function runReportJob(job: Job, user: any, connectedAccountId: string) {
   const prompt = `You are a reporting assistant. Use the Instagram MCP tools to fetch the authenticated user's Reels from the last 15 days.\n\n` +
     `1) Call INSTAGRAM_GET_IG_USER_MEDIA. ALWAYS pass a "fields" parameter (or equivalent) with this comma-separated list: id,caption,media_type,media_product_type,media_url,permalink,thumbnail_url,timestamp,video_duration,username. Fetch enough pages to cover the full 15-day window. Also try requesting "username" so we can derive accountUsername from the response.\n` +
     `2) Keep only items posted within the last 15 days AND where media_product_type === "REELS" (or media_type === "VIDEO" when product type is missing).\n` +
-    `3) For EACH reel, call INSTAGRAM_GET_IG_MEDIA_INSIGHTS. Try to request these metrics by name when the tool accepts a metric list: views, reach, likes, comments, saved, shares, total_interactions, ig_reels_video_view_total_time, ig_reels_avg_watch_time, plays, clips_replays_count, profile_activity. If the tool supports a breakdown parameter, request breakdown=follow_type on reach (so we can compute non-follower reach) and breakdown=action_type on profile_activity. Collect every numeric field returned. Keep the raw response in the "insights" object verbatim — including any "breakdowns" array or nested object Instagram returns.\n` +
+    `3) For EACH reel, call INSTAGRAM_GET_IG_MEDIA_INSIGHTS. Try to request these metrics by name when the tool accepts a metric list: views, reach, likes, comments, saved, shares, total_interactions, ig_reels_video_view_total_time, ig_reels_avg_watch_time, plays, clips_replays_count, profile_activity. If the tool supports a breakdown parameter, request breakdown=follow_type on reach and breakdown=action_type on profile_activity. CRITICAL OUTPUT SHAPE: the "insights" field per reel MUST be a FLAT object where each key is the metric name and each value is the numeric value, e.g. {"views": 162, "reach": 150, "ig_reels_avg_watch_time": 3625, ...}. If Instagram returns its native {data: [{name, values: [{value}]}, ...]} shape, you MUST transform it into the flat object yourself before returning. For breakdown data, attach the breakdowns array under a sibling key with "_breakdowns" suffix — e.g. reach=8000, reach_breakdowns=[{dimension_values:["FOLLOWER"],value:5000},{dimension_values:["NON_FOLLOWER"],value:3000}]. Do NOT keep Instagram's wrapper objects ({value: N}, {values: [...]}) — flatten them.\n` +
     `4) For each reel capture: id, caption, permalink, thumbnailUrl (use media node's thumbnail_url for videos, or media_url if not present), timestamp (postedAt as the raw ISO string Instagram returned — do NOT convert timezone here), mediaProductType, durationSeconds (from video_duration; null if not exposed). CRITICAL: Always copy the caption verbatim from the media node — never replace with "(no caption)" or "". If the API returns no caption field for a media item, use an empty string. Never omit thumbnailUrl if the tool returned one.\n` +
     `5) Return ONLY a JSON object with: reportGeneratedAt (ISO timestamp), dateRange (string like "Last 15 days: YYYY-MM-DD to YYYY-MM-DD"), accountUsername (string, from any media node's username field if present), followerCount (set to null — Composio's Instagram toolkit doesn't currently expose a follower-count tool), reels (array of { id, caption, permalink, thumbnailUrl, postedAt, mediaProductType, durationSeconds, insights }).\n` +
     `6) No markdown fences, no commentary.`;
@@ -994,9 +1014,48 @@ function round(value: number, digits = 2): number {
 
 const DEFAULT_REEL_DURATION_SECONDS = 30; // Fallback when Instagram doesn't expose video_duration
 
+// Instagram's Insights API returns either a flat object ({views: 162}) or its native
+// {data: [{name, values: [{value}]}, ...]} shape, depending on how the agent serialised it.
+// Normalise to a consistent flat object before any extraction.
+function flattenInsights(ins: any): any {
+  if (!ins || typeof ins !== 'object') return {};
+  // Native Instagram shape: { data: [{name, values, total_value, ...}] }
+  if (Array.isArray(ins.data)) {
+    const flat: any = {};
+    for (const item of ins.data) {
+      if (!item?.name) continue;
+      let v: any = undefined;
+      if (typeof item.value === 'number') v = item.value;
+      else if (item.total_value && typeof item.total_value.value === 'number') v = item.total_value.value;
+      else if (Array.isArray(item.values) && item.values.length) {
+        const first = item.values[0];
+        v = typeof first === 'number' ? first : (first && typeof first === 'object' ? first.value : 0);
+      }
+      flat[item.name] = v ?? 0;
+      // Preserve breakdowns for follow_type / action_type extraction
+      if (item.total_value?.breakdowns) flat[item.name + '_breakdowns'] = item.total_value.breakdowns;
+      else if (item.breakdowns) flat[item.name + '_breakdowns'] = item.breakdowns;
+    }
+    return flat;
+  }
+  // Already flat-ish — unwrap any single-value wrappers
+  const flat: any = {};
+  for (const [k, v] of Object.entries(ins)) {
+    if (v === null || v === undefined) continue;
+    if (typeof v === 'number' || typeof v === 'string') { flat[k] = v; continue; }
+    if (typeof v !== 'object') continue;
+    const vv: any = v;
+    if (typeof vv.value === 'number') flat[k] = vv.value;
+    else if (Array.isArray(vv.values) && vv.values[0]?.value !== undefined) flat[k] = vv.values[0].value;
+    else if (vv.total_value && typeof vv.total_value.value === 'number') flat[k] = vv.total_value.value;
+    else flat[k] = v; // keep nested for breakdowns
+  }
+  return flat;
+}
+
 // Extract numbers from possibly-nested Instagram breakdowns (e.g. reach with breakdown=follow_type)
 function extractBreakdown(ins: any, metricKey: string, breakdownDimension: string, label: string): number {
-  const breakdowns = ins?.[metricKey]?.breakdowns ?? ins?.breakdowns;
+  const breakdowns = ins?.[metricKey + '_breakdowns'] ?? ins?.[metricKey]?.breakdowns ?? ins?.breakdowns;
   if (!Array.isArray(breakdowns)) return 0;
   for (const b of breakdowns) {
     if (b?.dimension_keys?.includes?.(breakdownDimension) || b?.name === breakdownDimension) {
@@ -1014,7 +1073,7 @@ function enrichReport(raw: any) {
   const now = Date.now();
   const followerCount = num(raw.followerCount);
   const reels = (raw.reels ?? []).map((reel: RawReel) => {
-    const ins = reel.insights ?? {};
+    const ins = flattenInsights(reel.insights ?? {});
     const views = num((ins as any).views ?? (ins as any).plays ?? (ins as any).impressions);
     const reach = num((ins as any).reach);
     const impressions = num((ins as any).impressions ?? views);

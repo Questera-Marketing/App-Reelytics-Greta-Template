@@ -176,6 +176,8 @@
     .report-history-select { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 999px; font-size: 0.85rem; font-family: inherit; cursor: pointer; outline: none; max-width: 380px; }
     .report-history-select:hover { border-color: var(--border-2); }
     .report-history-select:focus { border-color: var(--accent); }
+    .report-delete-btn { background: transparent; border: 1px solid var(--border); color: var(--bad); padding: 6px 12px; border-radius: 999px; font-size: 0.82rem; cursor: pointer; font-family: inherit; }
+    .report-delete-btn:hover { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.4); }
 
     /* Dev-mode OTP banner */
     .dev-code-banner { background: rgba(251,146,60,0.12); border: 1px dashed rgba(251,146,60,0.5); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; font-size: 0.85rem; color: var(--warn); }
@@ -537,6 +539,7 @@
           <div id="reportHistoryWrap" class="report-history-wrap hidden">
             <label for="reportHistory" class="report-history-label">Viewing report:</label>
             <select id="reportHistory" class="report-history-select"></select>
+            <button id="reportDeleteBtn" class="report-delete-btn" title="Delete this report">🗑 Delete</button>
           </div>
         </div>
         <div style="display:flex; gap:10px;">
@@ -1129,7 +1132,7 @@
     function renderReportHistory() {
       const wrap = $('reportHistoryWrap');
       const sel = $('reportHistory');
-      if (!state.reportList || state.reportList.length <= 1) {
+      if (!state.reportList || state.reportList.length === 0) {
         wrap.classList.add('hidden');
         return;
       }
@@ -1138,6 +1141,10 @@
         const label = `${i === 0 ? 'Latest · ' : ''}${new Date(r.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`;
         return `<option value="${escapeAttr(r.id)}" ${r.id === state.currentReportId ? 'selected' : ''}>${escapeHtml(label)}</option>`;
       }).join('');
+      // Hide the dropdown itself if there's only one — but keep the delete button visible.
+      sel.style.display = state.reportList.length > 1 ? '' : 'none';
+      const label = wrap.querySelector('.report-history-label');
+      if (label) label.style.display = state.reportList.length > 1 ? '' : 'none';
     }
 
     async function generateReport() {
@@ -1772,6 +1779,18 @@
     $('teamBtn').addEventListener('click', openTeam);
     $('pdfBtn').addEventListener('click', downloadPdf);
     $('reportHistory').addEventListener('change', (e) => loadReportById(e.target.value));
+    $('reportDeleteBtn').addEventListener('click', deleteCurrentReport);
+
+    async function deleteCurrentReport() {
+      if (!state.currentReportId) { toast('No report selected', 'error'); return; }
+      if (!confirm('Delete this report? This cannot be undone.')) return;
+      try {
+        await api(`/api/report/${encodeURIComponent(state.currentReportId)}?userId=${encodeURIComponent(state.user.id)}`, { method: 'DELETE' });
+        toast('Report deleted', 'success');
+        await loadLatestReport();
+        renderReport();
+      } catch (e) { toast(e.message, 'error'); }
+    }
 
     function addCanvasToPdf(pdf, canvas, jpegQuality = 0.92) {
       const pageW = pdf.internal.pageSize.getWidth();
