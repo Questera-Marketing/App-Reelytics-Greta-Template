@@ -1,4 +1,4 @@
-# Reelytics
+# Reelytics - A Greta Template
 
 Instagram Reels analytics — connect Instagram Business / Creator accounts via Composio, then generate a graded report on your reels powered by Composio MCP + Claude Agent SDK.
 
