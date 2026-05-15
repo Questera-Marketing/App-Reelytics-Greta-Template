@@ -926,7 +926,8 @@ async function runReportJob(job: Job, user: any, connectedAccountId: string) {
 }
 
 app.use((_req, res) => res.status(404).send('Not found'));
-app.listen(PORT, () => console.log(`Server running at ${PUBLIC_URL}`));
+// Bind explicitly to 0.0.0.0 — required so Railway / containers can reach the server from outside the loopback.
+app.listen(PORT, '0.0.0.0', () => console.log(`Server listening on 0.0.0.0:${PORT}  (PUBLIC_URL=${PUBLIC_URL})  (raw process.env.PORT=${process.env.PORT ?? 'unset'})`));
 
 // ============== Enrichment ==============
 type RawReel = {
