@@ -80,6 +80,9 @@
     .dropdown-item:hover { background: var(--card-2); }
     .dropdown-item.active { background: rgba(139, 124, 255, 0.15); }
     .dropdown-item .check { margin-left: auto; color: var(--accent); font-weight: 700; }
+    .dropdown-delete { margin-left: 6px; background: transparent; border: none; color: var(--muted); width: 22px; height: 22px; border-radius: 50%; font-size: 1.05rem; line-height: 1; cursor: pointer; flex-shrink: 0; opacity: 0; transition: all 0.15s; padding: 0; font-family: inherit; }
+    .dropdown-item:hover .dropdown-delete { opacity: 1; }
+    .dropdown-delete:hover { background: rgba(248,113,113,0.15); color: var(--bad); }
     .dropdown-separator { height: 1px; background: var(--border); margin: 6px 8px; }
     .dropdown-add { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; cursor: pointer; color: var(--accent); font-weight: 600; }
     .dropdown-add:hover { background: var(--card-2); }
@@ -843,18 +846,36 @@
         const item = document.createElement('div');
         item.className = 'dropdown-item' + (acc.connected_account_id === state.user.selected_connected_account_id ? ' active' : '');
         const dotColor = acc.status === 'active' ? 'var(--good)' : acc.status === 'pending' ? 'var(--warn)' : 'var(--bad)';
+        const canDelete = acc.role === 'owner';
+        const isSelected = acc.connected_account_id === state.user.selected_connected_account_id;
         item.innerHTML = `
           <span style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0;"></span>
           <div style="flex:1;min-width:0;">
             <div style="font-weight:600;font-size:0.92rem;">${escapeHtml(accountLabel(acc))}</div>
             <div style="font-size:0.75rem;color:var(--muted);">${acc.status}${acc.connected_status ? ' · ' + escapeHtml(acc.connected_status) : ''}</div>
           </div>
-          ${acc.connected_account_id === state.user.selected_connected_account_id ? '<span class="check">✓</span>' : ''}
+          ${isSelected ? '<span class="check">✓</span>' : ''}
+          ${canDelete ? `<button class="dropdown-delete" data-delete-id="${escapeAttr(acc.connected_account_id)}" data-delete-label="${escapeAttr(accountLabel(acc))}" title="Disconnect this account">×</button>` : ''}
         `;
         item.addEventListener('click', async (e) => {
+          if (e.target.closest('.dropdown-delete')) return; // delete is handled separately
           e.stopPropagation();
           await selectAccount(acc.connected_account_id);
         });
+        const delBtn = item.querySelector('.dropdown-delete');
+        if (delBtn) {
+          delBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const id = e.target.dataset.deleteId;
+            const label = e.target.dataset.deleteLabel;
+            if (!confirm(`Disconnect ${label}? This removes it from Reelytics and revokes Composio access. Reports for this account stay in the database.`)) return;
+            try {
+              await api(`/api/accounts/${encodeURIComponent(id)}?userId=${encodeURIComponent(state.user.id)}`, { method: 'DELETE' });
+              toast('Account disconnected', 'success');
+              await loadDashboard(state.user.id);
+            } catch (err) { toast(err.message, 'error'); }
+          });
+        }
         dropdown.appendChild(item);
       });
 
