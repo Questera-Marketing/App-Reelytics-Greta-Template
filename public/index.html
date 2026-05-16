@@ -158,6 +158,9 @@
     tr.reel-hidden td { opacity: 0.45; }
     tr.reel-hidden .reel-hide-btn { opacity: 1; color: var(--accent); }
     tr.reel-hidden .reel-hide-btn:hover { background: rgba(139,124,255,0.15); color: var(--accent); }
+    /* "Show all" mode — marked-hidden reels are included in metrics but visually tagged. */
+    tr.reel-marked-hidden td { background: rgba(139,124,255,0.05); }
+    tr.reel-marked-hidden .reel-hide-btn { opacity: 1; color: var(--accent); }
 
     .hidden-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 16px; margin: 0 0 12px; background: rgba(139,124,255,0.08); border: 1px solid rgba(139,124,255,0.25); border-radius: 12px; font-size: 0.86rem; color: var(--text); flex-wrap: wrap; }
     .hidden-banner em { color: var(--muted); font-style: normal; font-size: 0.78rem; }
@@ -1282,14 +1285,19 @@
 
     function applyHiddenFilter(report) {
       // Filter the report's reels by hiddenReelIds, then recompute every dependent metric
-      // so totals, averages, tiers, and normalized scores reflect only visible reels.
+      // so totals, averages, tiers, and normalized scores reflect only the active set.
+      // When state.showHidden is true, the user has asked to include everything — metrics
+      // are recomputed across the full set.
       const allReels = report._allReels || report.reels || [];
       const hiddenIds = new Set(report.hiddenReelIds || (report.data?.hiddenReelIds) || []);
-      const visible = allReels.filter(r => !hiddenIds.has(r.id));
+      const includeAll = !!state.showHidden;
+      const visible = includeAll ? allReels.slice() : allReels.filter(r => !hiddenIds.has(r.id));
       const hidden = allReels.filter(r => hiddenIds.has(r.id));
       report._allReels = allReels;
       report._hiddenReels = hidden;
       report._hiddenCount = hidden.length;
+      report._hiddenIdsSet = hiddenIds;
+      report._showingAll = includeAll;
       report.reels = visible;
 
       // Recompute totals
@@ -1469,19 +1477,19 @@
         </a>
       `;}).join('');
 
-      // Headings + body
+      // Headings + body — report.reels is already the correct set (full or filtered)
       renderHeadings();
-      const rowsToRender = state.showHidden && r._hiddenReels?.length
-        ? [...sorted, ...r._hiddenReels.map(rr => ({ ...rr, _isHidden: true }))]
-        : sorted;
-      $('reelsTbody').innerHTML = rowsToRender.map(reel => `
-        <tr data-permalink="${escapeAttr(reel.permalink || '')}" data-reel-id="${escapeAttr(reel.id)}" class="${reel._isHidden ? 'reel-hidden' : ''}">
+      $('reelsTbody').innerHTML = sorted.map(reel => {
+        const isMarkedHidden = r._hiddenIdsSet?.has(reel.id);
+        const rowClass = isMarkedHidden && r._showingAll ? 'reel-marked-hidden' : '';
+        return `
+        <tr data-permalink="${escapeAttr(reel.permalink || '')}" data-reel-id="${escapeAttr(reel.id)}" class="${rowClass}">
           <td>
             <div class="thumb-cell">
               ${thumbnailHtml(reel, 'cell')}
               <span class="caption">${escapeHtml((reel.caption || '').slice(0, 120) || '(no caption)')}</span>
               ${reel.permalink ? '<span class="external">↗</span>' : ''}
-              <button class="reel-hide-btn" data-hide-id="${escapeAttr(reel.id)}" data-currently-hidden="${reel._isHidden ? '1' : '0'}" title="${reel._isHidden ? 'Unhide — include in calculations again' : 'Hide from this report and recompute everything without it'}">${reel._isHidden ? '↩' : '🚫'}</button>
+              <button class="reel-hide-btn" data-hide-id="${escapeAttr(reel.id)}" data-currently-hidden="${isMarkedHidden ? '1' : '0'}" title="${isMarkedHidden ? 'Unhide — keep including in calculations' : 'Hide from this report and recompute without it'}">${isMarkedHidden ? '↩' : '🚫'}</button>
             </div>
           </td>
           <td><span class="num">${fmtDate(reel.postedAt)}</span></td>
@@ -1542,8 +1550,7 @@
         const ids = new Set(state.report.hiddenReelIds || []);
         if (hidden) ids.add(reelId); else ids.delete(reelId);
         state.report.hiddenReelIds = Array.from(ids);
-        // Reset _allReels so applyHiddenFilter rebuilds from full set
-        delete state.report._allReels;
+        // _allReels stays cached so applyHiddenFilter can re-include reels on unhide.
         renderReport();
         toast(hidden ? 'Reel hidden · metrics recomputed' : 'Reel restored · metrics recomputed', 'success');
       } catch (e) { toast(e.message, 'error'); }
@@ -1561,9 +1568,12 @@
         banner.className = 'hidden-banner';
         $('reelsTable').parentElement.insertBefore(banner, $('reelsTable'));
       }
+      const stateLabel = state.showHidden
+        ? `Including <b>all ${r.reels.length}</b> reels in calculations (${r._hiddenCount} marked hidden are temporarily included).`
+        : `<b>${r._hiddenCount}</b> reel${r._hiddenCount > 1 ? 's' : ''} hidden. Totals, averages, hook /100, tiers, and charts are recomputed without ${r._hiddenCount > 1 ? 'them' : 'it'}.`;
       banner.innerHTML = `
-        <span><b>${r._hiddenCount}</b> reel${r._hiddenCount > 1 ? 's' : ''} hidden from this report. Totals, averages, hook /100, tiers, and charts are recomputed without ${r._hiddenCount > 1 ? 'them' : 'it'}. <em>Suggestions and the action headline were generated before hiding — they may be stale.</em></span>
-        <button class="hidden-banner-toggle" id="toggleHiddenBtn">${state.showHidden ? 'Hide them again' : 'Show in table'}</button>
+        <span>${stateLabel} <em>Suggestions and the action headline were generated before hiding — they may be stale.</em></span>
+        <button class="hidden-banner-toggle" id="toggleHiddenBtn">${state.showHidden ? 'Re-hide and recompute without them' : 'Include all & recompute'}</button>
       `;
       document.getElementById('toggleHiddenBtn').addEventListener('click', () => {
         state.showHidden = !state.showHidden;
