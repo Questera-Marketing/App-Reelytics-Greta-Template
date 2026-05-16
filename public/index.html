@@ -152,9 +152,14 @@
     .thumb-cell img, .thumb-cell .ph { width: 28px; height: 40px; border-radius: 6px; object-fit: cover; background: var(--card-2); flex-shrink: 0; }
     .thumb-cell .caption { font-size: 0.88rem; line-height: 1.35; color: #d8d8e8; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .thumb-cell .external { color: var(--muted); font-size: 0.8rem; flex-shrink: 0; }
-    .reel-hide-btn { background: transparent; border: none; color: var(--muted); font-size: 0.85rem; cursor: pointer; padding: 4px 6px; border-radius: 6px; flex-shrink: 0; opacity: 0; transition: all 0.15s; font-family: inherit; line-height: 1; }
-    table.reels tr:hover .reel-hide-btn { opacity: 0.8; }
-    .reel-hide-btn:hover { opacity: 1 !important; background: rgba(248,113,113,0.12); color: var(--bad); }
+    .reel-hide-btn { position: relative; background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 4px 6px; border-radius: 6px; flex-shrink: 0; opacity: 0; transition: all 0.15s; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+    table.reels tr:hover .reel-hide-btn { opacity: 0.7; }
+    .reel-hide-btn:hover { opacity: 1 !important; background: rgba(139,124,255,0.12); color: var(--accent); }
+    .reel-hide-btn svg { display: block; }
+    .reel-hide-tt { position: absolute; bottom: calc(100% + 8px); right: -4px; min-width: 240px; max-width: 320px; padding: 10px 12px; background: #0b0b13; border: 1px solid var(--border-2); border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,0.5); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; font-size: 0.78rem; font-weight: 500; line-height: 1.45; text-align: left; opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 50; white-space: normal; }
+    .reel-hide-tt b { color: var(--accent); font-weight: 700; }
+    .reel-hide-tt::after { content: ''; position: absolute; top: 100%; right: 12px; border: 6px solid transparent; border-top-color: #0b0b13; }
+    .reel-hide-btn:hover .reel-hide-tt { opacity: 1; }
     tr.reel-hidden td { opacity: 0.45; }
     tr.reel-hidden .reel-hide-btn { opacity: 1; color: var(--accent); }
     tr.reel-hidden .reel-hide-btn:hover { background: rgba(139,124,255,0.15); color: var(--accent); }
@@ -1528,7 +1533,14 @@
               ${thumbnailHtml(reel, 'cell')}
               <span class="caption">${escapeHtml((reel.caption || '').slice(0, 120) || '(no caption)')}</span>
               ${reel.permalink ? '<span class="external">↗</span>' : ''}
-              <button class="reel-hide-btn" data-hide-id="${escapeAttr(reel.id)}" data-currently-hidden="${isMarkedHidden ? '1' : '0'}" title="${isMarkedHidden ? 'Unhide — keep including in calculations' : 'Hide from this report and recompute without it'}">${isMarkedHidden ? '↩' : '🚫'}</button>
+              <button class="reel-hide-btn" data-hide-id="${escapeAttr(reel.id)}" data-currently-hidden="${isMarkedHidden ? '1' : '0'}" aria-label="${isMarkedHidden ? 'Unhide post' : 'Hide post'}">
+                ${isMarkedHidden
+                  ? '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+                  : '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>'}
+                <span class="reel-hide-tt">${isMarkedHidden
+                  ? '<b>Unhide this post</b><br/>Mark it as visible again. Hook scores, totals, averages, and charts will be recomputed including it.'
+                  : '<b>Hide this post</b><br/>Removes it from the report metrics. Totals, averages, hook /100 (re-normalized), tiers, and all charts will be recomputed without this post. The post stays in the database — you can unhide it anytime.'}</span>
+              </button>
             </div>
           </td>
           <td><span class="type-pill type-${(mediaTypeLabel(reel) || 'post').toLowerCase()}">${escapeHtml(mediaTypeLabel(reel))}</span></td>
