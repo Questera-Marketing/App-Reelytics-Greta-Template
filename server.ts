@@ -824,6 +824,33 @@ app.get('/api/report/latest', async (req, res) => {
   return res.json({ report: data?.[0]?.data ?? null, createdAt: data?.[0]?.created_at ?? null, reportId: data?.[0]?.id ?? null });
 });
 
+app.patch('/api/report/:reportId/hide-reel', async (req, res) => {
+  try {
+    const userId = String(req.body?.userId ?? '');
+    const reelId = String(req.body?.reelId ?? '');
+    const hidden = !!req.body?.hidden;
+    const reportId = req.params.reportId;
+    if (!userId || !reelId) return res.status(400).json({ error: 'userId and reelId required' });
+
+    const { data: report } = await supabase.from('reports').select('*').eq('id', reportId).single();
+    if (!report) return res.status(404).json({ error: 'report not found' });
+
+    const role = await getRoleForAccount(userId, report.connected_account_id);
+    if (role !== 'owner' && role !== 'admin') return res.status(403).json({ error: 'Only owner/admin can hide reels' });
+
+    const data = { ...(report.data as any) };
+    const set = new Set<string>(data.hiddenReelIds ?? []);
+    if (hidden) set.add(reelId); else set.delete(reelId);
+    data.hiddenReelIds = Array.from(set);
+
+    const { error } = await supabase.from('reports').update({ data }).eq('id', reportId);
+    if (error) throw error;
+    return res.json({ ok: true, hiddenReelIds: data.hiddenReelIds });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
 app.delete('/api/report/:reportId', async (req, res) => {
   try {
     const userId = String(req.query.userId ?? '');

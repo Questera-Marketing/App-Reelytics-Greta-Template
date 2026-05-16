@@ -152,6 +152,17 @@
     .thumb-cell img, .thumb-cell .ph { width: 28px; height: 40px; border-radius: 6px; object-fit: cover; background: var(--card-2); flex-shrink: 0; }
     .thumb-cell .caption { font-size: 0.88rem; line-height: 1.35; color: #d8d8e8; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .thumb-cell .external { color: var(--muted); font-size: 0.8rem; flex-shrink: 0; }
+    .reel-hide-btn { background: transparent; border: none; color: var(--muted); font-size: 0.85rem; cursor: pointer; padding: 4px 6px; border-radius: 6px; flex-shrink: 0; opacity: 0; transition: all 0.15s; font-family: inherit; line-height: 1; }
+    table.reels tr:hover .reel-hide-btn { opacity: 0.8; }
+    .reel-hide-btn:hover { opacity: 1 !important; background: rgba(248,113,113,0.12); color: var(--bad); }
+    tr.reel-hidden td { opacity: 0.45; }
+    tr.reel-hidden .reel-hide-btn { opacity: 1; color: var(--accent); }
+    tr.reel-hidden .reel-hide-btn:hover { background: rgba(139,124,255,0.15); color: var(--accent); }
+
+    .hidden-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 16px; margin: 0 0 12px; background: rgba(139,124,255,0.08); border: 1px solid rgba(139,124,255,0.25); border-radius: 12px; font-size: 0.86rem; color: var(--text); flex-wrap: wrap; }
+    .hidden-banner em { color: var(--muted); font-style: normal; font-size: 0.78rem; }
+    .hidden-banner-toggle { background: transparent; border: 1px solid var(--border-2); color: var(--text); padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; cursor: pointer; font-family: inherit; }
+    .hidden-banner-toggle:hover { background: var(--card-2); }
     .pill { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; min-width: 36px; text-align: center; }
     .pill.good { background: rgba(74, 222, 128, 0.15); color: var(--good); }
     .pill.warn { background: rgba(251, 146, 60, 0.15); color: var(--warn); }
@@ -1269,6 +1280,65 @@
       return t;
     }
 
+    function applyHiddenFilter(report) {
+      // Filter the report's reels by hiddenReelIds, then recompute every dependent metric
+      // so totals, averages, tiers, and normalized scores reflect only visible reels.
+      const allReels = report._allReels || report.reels || [];
+      const hiddenIds = new Set(report.hiddenReelIds || (report.data?.hiddenReelIds) || []);
+      const visible = allReels.filter(r => !hiddenIds.has(r.id));
+      const hidden = allReels.filter(r => hiddenIds.has(r.id));
+      report._allReels = allReels;
+      report._hiddenReels = hidden;
+      report._hiddenCount = hidden.length;
+      report.reels = visible;
+
+      // Recompute totals
+      report.totals = visible.reduce((acc, r) => {
+        const m = r.metrics || {};
+        acc.views += m.views || 0;
+        acc.reach += m.reach || 0;
+        acc.likes += m.likes || 0;
+        acc.comments += m.comments || 0;
+        acc.shares += m.shares || 0;
+        acc.saves += m.saves || 0;
+        acc.totalInteractions += m.totalInteractions || 0;
+        return acc;
+      }, { views: 0, reach: 0, likes: 0, comments: 0, shares: 0, saves: 0, totalInteractions: 0 });
+
+      // Re-normalize hook score within visible set (top visible reel = 100)
+      const scores = visible.map(r => r.metrics?.hookScore ?? 0);
+      const min = scores.length ? Math.min(...scores) : 0;
+      const max = scores.length ? Math.max(...scores) : 0;
+      const span = max - min;
+      for (const r of visible) {
+        r.metrics = r.metrics || {};
+        r.metrics.hookScoreNormalized = span > 0
+          ? Math.round(((r.metrics.hookScore - min) / span) * 100 * 10) / 10
+          : (visible.length ? 100 : 0);
+      }
+
+      // Recompute averages
+      const avg = (key) => {
+        const vals = visible.map(r => r.metrics?.[key]).filter(v => typeof v === 'number' && !Number.isNaN(v));
+        return vals.length ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 100) / 100 : 0;
+      };
+      report.averages = {
+        ...(report.averages || {}),
+        hookScoreNormalized: avg('hookScoreNormalized'),
+        hookScore: avg('hookScore'),
+        hookRate: avg('hookRate'),
+        engagementRate: avg('engagementRate'),
+        watchSeconds: avg('watchSeconds'),
+        sharePct: avg('sharePct'),
+        savePct: avg('savePct'),
+        replayRate: avg('replayRate')
+      };
+
+      report.tiers = backfillTiers({ reels: visible });
+      report.reelCount = visible.length;
+      return report;
+    }
+
     function backfillReport(report) {
       // Recompute fields that may be missing in older saved reports.
       if (!report || !report.reels) return report;
@@ -1335,7 +1405,7 @@
       showSection('emptyState', false);
       showSection('reportView', true);
 
-      const r = backfillReport(state.report);
+      const r = applyHiddenFilter(backfillReport(state.report));
       const selected = state.accounts.find(a => a.connected_account_id === state.user.selected_connected_account_id);
       const handle = r.accountUsername || selected?.username || selected?.alias || '';
       $('mainTitle').innerHTML = handle ? `<span class="account-handle">@${escapeHtml(handle)}</span>` : 'Your dashboard';
@@ -1401,13 +1471,17 @@
 
       // Headings + body
       renderHeadings();
-      $('reelsTbody').innerHTML = sorted.map(reel => `
-        <tr data-permalink="${escapeAttr(reel.permalink || '')}">
+      const rowsToRender = state.showHidden && r._hiddenReels?.length
+        ? [...sorted, ...r._hiddenReels.map(rr => ({ ...rr, _isHidden: true }))]
+        : sorted;
+      $('reelsTbody').innerHTML = rowsToRender.map(reel => `
+        <tr data-permalink="${escapeAttr(reel.permalink || '')}" data-reel-id="${escapeAttr(reel.id)}" class="${reel._isHidden ? 'reel-hidden' : ''}">
           <td>
             <div class="thumb-cell">
               ${thumbnailHtml(reel, 'cell')}
               <span class="caption">${escapeHtml((reel.caption || '').slice(0, 120) || '(no caption)')}</span>
               ${reel.permalink ? '<span class="external">↗</span>' : ''}
+              <button class="reel-hide-btn" data-hide-id="${escapeAttr(reel.id)}" data-currently-hidden="${reel._isHidden ? '1' : '0'}" title="${reel._isHidden ? 'Unhide — include in calculations again' : 'Hide from this report and recompute everything without it'}">${reel._isHidden ? '↩' : '🚫'}</button>
             </div>
           </td>
           <td><span class="num">${fmtDate(reel.postedAt)}</span></td>
@@ -1437,11 +1511,63 @@
 
       $('reelsTbody').querySelectorAll('tr').forEach(tr => {
         tr.addEventListener('click', (e) => {
-          // Ignore clicks on tooltips/links inside the row
-          if (e.target.closest('a')) return;
+          if (e.target.closest('a') || e.target.closest('.reel-hide-btn')) return;
           const url = tr.dataset.permalink;
           if (url) window.open(url, '_blank', 'noopener,noreferrer');
         });
+      });
+
+      // Hide / unhide buttons
+      $('reelsTbody').querySelectorAll('.reel-hide-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const reelId = btn.dataset.hideId;
+          const currentlyHidden = btn.dataset.currentlyHidden === '1';
+          await toggleReelHidden(reelId, !currentlyHidden);
+        });
+      });
+
+      // Hidden-banner above the table
+      renderHiddenBanner(r);
+    }
+
+    async function toggleReelHidden(reelId, hidden) {
+      if (!state.currentReportId) { toast('Open a saved report first', 'error'); return; }
+      try {
+        await api(`/api/report/${encodeURIComponent(state.currentReportId)}/hide-reel`, {
+          method: 'PATCH',
+          body: { userId: state.user.id, reelId, hidden }
+        });
+        // Update local report.hiddenReelIds so we don't have to refetch from server
+        const ids = new Set(state.report.hiddenReelIds || []);
+        if (hidden) ids.add(reelId); else ids.delete(reelId);
+        state.report.hiddenReelIds = Array.from(ids);
+        // Reset _allReels so applyHiddenFilter rebuilds from full set
+        delete state.report._allReels;
+        renderReport();
+        toast(hidden ? 'Reel hidden · metrics recomputed' : 'Reel restored · metrics recomputed', 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function renderHiddenBanner(r) {
+      let banner = document.getElementById('hiddenBanner');
+      if (!r._hiddenCount) {
+        if (banner) banner.remove();
+        return;
+      }
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'hiddenBanner';
+        banner.className = 'hidden-banner';
+        $('reelsTable').parentElement.insertBefore(banner, $('reelsTable'));
+      }
+      banner.innerHTML = `
+        <span><b>${r._hiddenCount}</b> reel${r._hiddenCount > 1 ? 's' : ''} hidden from this report. Totals, averages, hook /100, tiers, and charts are recomputed without ${r._hiddenCount > 1 ? 'them' : 'it'}. <em>Suggestions and the action headline were generated before hiding — they may be stale.</em></span>
+        <button class="hidden-banner-toggle" id="toggleHiddenBtn">${state.showHidden ? 'Hide them again' : 'Show in table'}</button>
+      `;
+      document.getElementById('toggleHiddenBtn').addEventListener('click', () => {
+        state.showHidden = !state.showHidden;
+        renderReport();
       });
     }
 
