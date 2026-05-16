@@ -909,13 +909,18 @@ async function runReportJob(job: Job, user: any, connectedAccountId: string) {
   });
   jobLog(job, 'info', 'Composio session ready.');
 
-  const prompt = `You are a reporting assistant. Use the Instagram MCP tools to fetch the authenticated user's Reels from the last 15 days.\n\n` +
-    `1) Call INSTAGRAM_GET_IG_USER_MEDIA. ALWAYS pass a "fields" parameter (or equivalent) with this comma-separated list: id,caption,media_type,media_product_type,media_url,permalink,thumbnail_url,timestamp,video_duration,username. Fetch enough pages to cover the full 15-day window. Also try requesting "username" so we can derive accountUsername from the response.\n` +
-    `2) Keep only items posted within the last 15 days AND where media_product_type === "REELS" (or media_type === "VIDEO" when product type is missing).\n` +
-    `3) For EACH reel, call INSTAGRAM_GET_IG_MEDIA_INSIGHTS. Try to request these metrics by name when the tool accepts a metric list: views, reach, likes, comments, saved, shares, total_interactions, ig_reels_video_view_total_time, ig_reels_avg_watch_time, plays, clips_replays_count, profile_activity. If the tool supports a breakdown parameter, request breakdown=follow_type on reach and breakdown=action_type on profile_activity. CRITICAL OUTPUT SHAPE: the "insights" field per reel MUST be a FLAT object where each key is the metric name and each value is the numeric value, e.g. {"views": 162, "reach": 150, "ig_reels_avg_watch_time": 3625, ...}. If Instagram returns its native {data: [{name, values: [{value}]}, ...]} shape, you MUST transform it into the flat object yourself before returning. For breakdown data, attach the breakdowns array under a sibling key with "_breakdowns" suffix — e.g. reach=8000, reach_breakdowns=[{dimension_values:["FOLLOWER"],value:5000},{dimension_values:["NON_FOLLOWER"],value:3000}]. Do NOT keep Instagram's wrapper objects ({value: N}, {values: [...]}) — flatten them.\n` +
-    `4) For each reel capture: id, caption, permalink, thumbnailUrl (use media node's thumbnail_url for videos, or media_url if not present), timestamp (postedAt as the raw ISO string Instagram returned — do NOT convert timezone here), mediaProductType, durationSeconds (from video_duration; null if not exposed). CRITICAL: Always copy the caption verbatim from the media node — never replace with "(no caption)" or "". If the API returns no caption field for a media item, use an empty string. Never omit thumbnailUrl if the tool returned one.\n` +
-    `5) Return ONLY a JSON object with: reportGeneratedAt (ISO timestamp), dateRange (string like "Last 15 days: YYYY-MM-DD to YYYY-MM-DD"), accountUsername (string, from any media node's username field if present), followerCount (set to null — Composio's Instagram toolkit doesn't currently expose a follower-count tool), reels (array of { id, caption, permalink, thumbnailUrl, postedAt, mediaProductType, durationSeconds, insights }).\n` +
-    `6) No markdown fences, no commentary.`;
+  const prompt = `You are a reporting assistant. Use the Instagram MCP tools to fetch the authenticated user's media from the last 15 days — INCLUDING reels, single image posts, single video posts, and carousels.\n\n` +
+    `1) Call INSTAGRAM_GET_IG_USER_MEDIA. ALWAYS pass a "fields" parameter (or equivalent) with this comma-separated list: id,caption,media_type,media_product_type,media_url,permalink,thumbnail_url,timestamp,video_duration,username. Fetch enough pages to cover the full 15-day window.\n` +
+    `2) Keep ALL items posted within the last 15 days, regardless of media_type. Expected media_type values: "IMAGE", "VIDEO", "CAROUSEL_ALBUM". Expected media_product_type values: "FEED", "REELS", "STORY". Do NOT filter to just reels.\n` +
+    `3) For EACH item, call INSTAGRAM_GET_IG_MEDIA_INSIGHTS. The available metric set differs by media type — request what each type supports:\n` +
+    `   - REELS: views, reach, likes, comments, saved, shares, total_interactions, ig_reels_video_view_total_time, ig_reels_avg_watch_time, plays, clips_replays_count, profile_activity.\n` +
+    `   - VIDEO (feed): reach, likes, comments, saved, shares, total_interactions, ig_reels_avg_watch_time (sometimes), profile_activity.\n` +
+    `   - IMAGE / CAROUSEL_ALBUM: reach, likes, comments, saved, shares, total_interactions, profile_activity, follows.\n` +
+    `   If the tool supports a breakdown parameter, request breakdown=follow_type on reach and breakdown=action_type on profile_activity. If a metric isn't supported for a given type, skip it gracefully — never fail the whole pipeline because one metric is missing.\n` +
+    `4) CRITICAL OUTPUT SHAPE: the "insights" field per item MUST be a FLAT object — keys are metric names, values are numbers. Example: {"views": 162, "reach": 150, "ig_reels_avg_watch_time": 3625}. If Instagram returns its native {data: [{name, values: [{value}]}, ...]} shape, transform it into the flat object before returning. For breakdown data, attach the breakdowns array under a sibling key with "_breakdowns" suffix — e.g. reach=8000, reach_breakdowns=[{dimension_values:["FOLLOWER"],value:5000},{dimension_values:["NON_FOLLOWER"],value:3000}]. Do NOT keep wrapper objects ({value: N}, {values: [...]}).\n` +
+    `5) For each item capture: id, caption (verbatim — never replace with "(no caption)"; empty string if Instagram returned no caption), permalink, thumbnailUrl (media node's thumbnail_url for videos, media_url for images/carousels), timestamp (postedAt as raw ISO from Instagram, NO timezone conversion), mediaType (one of IMAGE/VIDEO/CAROUSEL_ALBUM), mediaProductType (FEED/REELS/STORY), durationSeconds (from video_duration; null if not applicable). Never omit thumbnailUrl if the tool returned one.\n` +
+    `6) Return ONLY a JSON object with: reportGeneratedAt (ISO timestamp), dateRange (string like "Last 15 days: YYYY-MM-DD to YYYY-MM-DD"), accountUsername (string), followerCount (null — Composio's toolkit doesn't expose this), reels (array of { id, caption, permalink, thumbnailUrl, postedAt, mediaType, mediaProductType, durationSeconds, insights }). The field name "reels" is kept for backwards compatibility but it now contains all media types.\n` +
+    `7) No markdown fences, no commentary.`;
 
   const schema = {
     type: 'object',
@@ -935,6 +940,7 @@ async function runReportJob(job: Job, user: any, connectedAccountId: string) {
             thumbnailUrl: { type: 'string' },
             postedAt: { type: 'string' },
             mediaProductType: { type: 'string' },
+            mediaType: { type: 'string' },
             durationSeconds: { type: ['number', 'null'] },
             insights: { type: 'object', additionalProperties: true }
           },
@@ -1020,6 +1026,7 @@ type RawReel = {
   permalink?: string;
   thumbnailUrl?: string;
   postedAt?: string;
+  mediaType?: string;
   mediaProductType?: string;
   durationSeconds?: number;
   insights: Record<string, unknown>;
@@ -1146,7 +1153,12 @@ function enrichReport(raw: any) {
     const profileBioTaps = extractBreakdown(ins, 'profile_activity', 'action_type', 'BIO_LINK_CLICKED') || extractBreakdown(ins, 'profile_activity', 'action_type', 'bio_link_clicked');
     const reachFactor = Math.sqrt(Math.max(reach, 0));
     const socialBoost = 1 + sharePct / 100 + savePct / 200;
-    const hookScore = watchSeconds * reachFactor * socialBoost;
+    // Reels score on watch_s; static posts/carousels have no watch time so we score on
+    // engagement rate (scaled to be roughly comparable in magnitude to reels' watch_s).
+    const isReelLike = (reel.mediaProductType === 'REELS') || (reel.mediaType === 'VIDEO' && watchSeconds > 0);
+    const hookScore = isReelLike
+      ? watchSeconds * reachFactor * socialBoost
+      : (engagementRate / 2) * reachFactor * socialBoost;  // engagementRate is %, /2 brings it closer to typical watch_s magnitudes
     const hookScoreFromRate = duration > 0 ? hookRate * reachFactor * socialBoost : null;
 
     return {
@@ -1155,6 +1167,7 @@ function enrichReport(raw: any) {
       permalink: reel.permalink ?? '',
       thumbnailUrl: reel.thumbnailUrl ?? '',
       postedAt: reel.postedAt ?? '',
+      mediaType: reel.mediaType ?? '',
       mediaProductType: reel.mediaProductType ?? '',
       durationSeconds: duration || null,
       durationEstimated,
